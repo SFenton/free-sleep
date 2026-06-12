@@ -1,0 +1,50 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model sleep_records {
+  id                    Int      @id @default(autoincrement())
+  side                  String
+  entered_bed_at        Int
+  left_bed_at           Int
+  sleep_period_seconds  Int
+  times_exited_bed      Int
+  present_intervals     String
+  not_present_intervals String
+
+  @@unique([side, entered_bed_at])
+  // Create an index on 'side' and 'entered_bed_at'
+  @@index([side, entered_bed_at])
+}
+
+model vitals {
+  id             Int    @id @default(autoincrement())
+  side           String
+  timestamp      Int // 5-minute interval start (Unix timestamp)
+  heart_rate     Float? // Averaged over 5 minutes
+  hrv            Float? // Averaged over 5 minutes
+  breathing_rate Float? // Averaged over 5 minutes
+
+  @@unique([side, timestamp]) // Ensure no duplicate intervals
+  @@index([side, timestamp])
+}
+
+
+model movement {
+  id              Int      @id @default(autoincrement())
+  timestamp       Int
+  side            String
+  total_movement  Int
+  @@unique([side, timestamp]) // Ensure no duplicate intervals
+  @@index([side, timestamp])
+}
+
+
