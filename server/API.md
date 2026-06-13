@@ -348,6 +348,45 @@ The POST endpoints (`/api/deviceStatus`, `/api/settings`, `/api/schedules`) supp
 
 ---
 
+## MQTT
+
+MQTT is enabled by default in the Pod firmware and connects to `mqtt://homeassistant.local:1883`. Configure it live from the web app under Settings > MQTT; saved settings are persisted in LowDB and the MQTT client reconnects immediately when they change. Disabling MQTT from the toggle disconnects the broker client immediately. The default topic prefix is unique per Pod: `free-sleep/<pod-id>`, where `<pod-id>` is a persisted generated three-word ID like `LullabyPillowBed`. The built-in word list has more than 4 million possible combinations. `/persistent/free-sleep-data/mqtt.env` remains supported as first-run/bootstrap configuration before the UI settings DB exists. Optional variables are `MQTT_ENABLED`, `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_CLIENT_ID`, `MQTT_DEVICE_ID`, `MQTT_TOPIC_PREFIX`, `MQTT_HOME_ASSISTANT_DISCOVERY` (default `true`), `MQTT_HOME_ASSISTANT_DISCOVERY_PREFIX` (default `homeassistant`), `MQTT_POLL_INTERVAL_MS` (default `30000`), and `MQTT_CONFIG_FILE` (default `${DATA_FOLDER}/mqtt.env`).
+
+When enabled, the server publishes retained state under the topic prefix:
+
+| REST/API surface | MQTT state topic | MQTT command/request topic |
+| --- | --- | --- |
+| `/api/deviceStatus` | `<prefix>/deviceStatus/state` and per-side granular topics | `<prefix>/deviceStatus/set`, `<prefix>/<left|right>/temperature/set`, `<prefix>/<left|right>/power/set` |
+| `/api/settings` | `<prefix>/settings/state` | `<prefix>/settings/set`, `<prefix>/<left|right>/awayMode/set` |
+| `/api/schedules` | `<prefix>/schedules/state` | `<prefix>/schedules/set` |
+| `/api/services` | `<prefix>/services/state` | `<prefix>/services/set` |
+| `/api/serverStatus` | `<prefix>/serverStatus/state` | `<prefix>/request/serverStatus` |
+| `/api/metrics/presence` | `<prefix>/presence/state`, `<prefix>/<left|right>/presence/state` | `<prefix>/presence/set` |
+| `/api/metrics/vitals` | `<prefix>/metrics/vitals/latest/state` and per-side biometric topics | `<prefix>/request/metrics/vitals` |
+| `/api/metrics/vitals/summary` | request/response only | `<prefix>/request/metrics/vitals/summary` |
+| `/api/metrics/movement` | `<prefix>/metrics/movement/latest/state`, `<prefix>/<left|right>/movement/state` | `<prefix>/request/metrics/movement` |
+| `/api/metrics/sleep` | `<prefix>/metrics/sleep/latest/state`, `<prefix>/<left|right>/lastSleep/state` | `<prefix>/request/metrics/sleep` |
+
+Request topics accept an optional JSON envelope: `{"requestId":"abc","params":{"side":"left","startTime":"2025-02-15T00:00:00Z"}}`. Responses are published to `<prefix>/responses/<resource>/<requestId>` when a `requestId` is supplied, otherwise `<prefix>/responses/<resource>`.
+
+Home Assistant MQTT discovery publishes controls and sensors for each side, including power, target temperature, current temperature, away mode, presence, alarm vibration, heart rate, HRV, breathing rate, movement, LED brightness, priming, WiFi strength, and water level.
+
+---
+
+## `/api/mqttSettings`
+
+### GET
+
+- Returns the persisted MQTT configuration used by the broker client.
+
+### POST
+
+- Updates persisted MQTT configuration and immediately reloads the MQTT client.
+- When `enabled` is `true`, `url`, `deviceId`, `topicPrefix`, `pollIntervalMs`, and `discoveryPrefix` when Home Assistant discovery is enabled are required.
+- Setting `enabled` to `false` stops the MQTT client and publishes the offline status before disconnecting when connected.
+
+---
+
 ## `/api/services`
 
 ### GET
@@ -558,4 +597,3 @@ Timestamps are server-generated.
   }
 }
 ```
-

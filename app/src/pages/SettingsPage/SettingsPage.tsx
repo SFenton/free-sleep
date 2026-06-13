@@ -17,6 +17,7 @@ import FeaturesSection from './FeaturesSection/FeaturesSection.tsx';
 import Section from './Section.tsx';
 import DeviceSettingsSection from './DeviceSettingsSection/DeviceSettingsSection.tsx';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
+import MqttSettingsSection from './MqttSettingsSection.tsx';
 
 
 export default function SettingsPage() {
@@ -73,6 +74,9 @@ export default function SettingsPage() {
             </Typography>
           </Box>
         </Section>
+      </ErrorBoundary>
+      <ErrorBoundary componentName='MQTT settings'>
+        <MqttSettingsSection/>
       </ErrorBoundary>
       <ErrorBoundary componentName='Info section'>
         <DiscordLink/>

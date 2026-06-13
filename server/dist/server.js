@@ -1,5 +1,3 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="9db73c62-f014-5de8-b792-af2dbfb404df")}catch(e){}}();
 import './instrument.js';
 import express from 'express';
 import schedule from 'node-schedule';
@@ -15,10 +13,12 @@ import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
 import { setupSentryTags } from './setupSentryTags.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
+import { startMqttService } from './mqtt/mqttService.js';
 const port = 3000;
 const app = express();
 let server;
 let frankenMonitor;
+let mqttService;
 async function disconnectPrisma() {
     try {
         logger.debug('Flushing SQLite');
@@ -56,6 +56,7 @@ async function gracefulShutdown(signal) {
     }, 15_000);
     logger.debug('Stopping node-schedule');
     await schedule.gracefulShutdown();
+    await mqttService?.stop();
     await disconnectPrisma();
     try {
         if (server) {
@@ -103,6 +104,7 @@ async function startServer() {
     });
     serverStatus.status.express.status = 'healthy';
     serverStatus.status.logger.status = 'healthy';
+    mqttService = startMqttService();
     // Initialize Franken once before listening
     if (!config.remoteDevMode) {
         void initFranken()
@@ -139,4 +141,3 @@ startServer().catch((err) => {
     process.exit(1);
 });
 //# sourceMappingURL=server.js.map
-//# debugId=9db73c62-f014-5de8-b792-af2dbfb404df

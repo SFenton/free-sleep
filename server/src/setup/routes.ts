@@ -9,6 +9,7 @@ import execute from '../routes/execute/execute.js';
 import jobs from '../routes/jobs/jobs.js';
 import settings from '../routes/settings/settings.js';
 import services from '../routes/services/services.js';
+import mqttSettings from '../routes/mqttSettings/mqttSettings.js';
 import schedules from '../routes/schedules/schedules.js';
 import sleep from '../routes/metrics/sleep.js';
 import movement from '../routes/metrics/movement.js';
@@ -30,6 +31,7 @@ export default function (app: Express) {
   app.use('/api/', jobs);
   app.use('/api/', settings);
   app.use('/api/', services);
+  app.use('/api/', mqttSettings);
   app.use('/api/metrics/', movement);
   app.use('/api/metrics/', sleep);
   app.use('/api/metrics/', vitals);

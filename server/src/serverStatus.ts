@@ -56,6 +56,12 @@ class ServerStatus {
         description: 'Logging service',
         message: '',
       },
+      mqtt: {
+        name: 'MQTT',
+        status: 'not_started',
+        description: 'MQTT broker connection and Home Assistant integration',
+        message: '',
+      },
       powerSchedule: {
         name: 'Power schedule',
         status: 'not_started',

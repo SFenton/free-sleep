@@ -1,35 +1,11 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="ef61c7be-0170-5667-a459-5e45a787a7a8")}catch(e){}}();
 import express from 'express';
-import moment from 'moment-timezone';
 import { sleepRecordSchema } from '../../db/sleepRecordsSchema.js';
 import { loadSleepRecords } from '../../db/loadSleepRecords.js';
 import { prisma } from '../../db/prisma.js';
+import { loadSleepData } from './metricQueries.js';
 const router = express.Router();
 router.get('/sleep', async (req, res) => {
-    const { startTime, endTime, side } = req.query;
-    const query = {
-        entered_bed_at: {},
-        left_bed_at: {},
-    };
-    if (side)
-        query.side = side;
-    if (startTime) {
-        query.left_bed_at = {
-            gte: moment(startTime).unix(),
-        };
-    }
-    if (endTime) {
-        query.entered_bed_at = {
-            lte: moment(endTime).unix(),
-        };
-    }
-    const sleepRecords = await prisma.sleep_records.findMany({
-        where: query,
-        orderBy: { entered_bed_at: 'asc' },
-    });
-    const formattedRecords = await loadSleepRecords(sleepRecords);
-    res.json(formattedRecords);
+    res.json(await loadSleepData(req.query));
 });
 router.put('/sleep/:id', async (req, res) => {
     const { id } = req.params;
@@ -91,4 +67,3 @@ router.delete('/sleep/:id', async (req, res) => {
 });
 export default router;
 //# sourceMappingURL=sleep.js.map
-//# debugId=ef61c7be-0170-5667-a459-5e45a787a7a8
