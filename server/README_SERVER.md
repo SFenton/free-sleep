@@ -92,6 +92,24 @@ The server is composed of the following key components:
    npm start
    ```
 
+### MQTT / Home Assistant
+
+MQTT is on by default in the Pod firmware and connects to `mqtt://homeassistant.local:1883`. Configure the broker, credentials, enable toggle, topic prefix, device ID, Home Assistant discovery, and poll interval from the web app under Settings > MQTT; changes are saved persistently and reconnect the MQTT client immediately. Disabling MQTT from the toggle disconnects the broker client. The default topic prefix is unique per Pod (`free-sleep/<pod-id>`), where `<pod-id>` is a persisted generated three-word ID like `LullabyPillowBed`. The built-in word list has more than 4 million possible combinations, so multiple jailbroken Pods can share the same broker without controlling each other. `/persistent/free-sleep-data/mqtt.env` remains supported as first-run/bootstrap configuration before the UI settings DB exists. Home Assistant discovery is enabled by default and publishes under `homeassistant/`.
+
+Common settings:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MQTT_ENABLED` | `true` on Pod, `false` locally | Enables the MQTT client. |
+| `MQTT_CONFIG_FILE` | `/persistent/free-sleep-data/mqtt.env` | Bootstrap config file loaded after `.env.pod` before the persistent UI settings DB exists. |
+| `MQTT_URL` | `mqtt://homeassistant.local:1883` on Pod | Broker URL. |
+| `MQTT_USERNAME` / `MQTT_PASSWORD` | empty | Broker credentials. |
+| `MQTT_DEVICE_ID` | generated three-word ID | Device ID used in the default topic prefix and MQTT client ID. |
+| `MQTT_TOPIC_PREFIX` | `free-sleep/<pod-id>` | Prefix for state, command, and response topics. Leave blank for the generated per-Pod prefix. |
+| `MQTT_HOME_ASSISTANT_DISCOVERY` | `true` | Publishes Home Assistant discovery entities. |
+| `MQTT_HOME_ASSISTANT_DISCOVERY_PREFIX` | `homeassistant` | Home Assistant discovery prefix. |
+| `MQTT_POLL_INTERVAL_MS` | `30000` | State refresh interval. |
+
 ---
 
 ## File Structure
@@ -112,6 +130,3 @@ server/
 ```
 
 ---
-
-
-

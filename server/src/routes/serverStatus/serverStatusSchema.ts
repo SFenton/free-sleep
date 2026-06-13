@@ -31,6 +31,7 @@ export type ServerStatus = {
   frankenMonitor: StatusInfo;
   jobs: StatusInfo;
   logger: StatusInfo;
+  mqtt: StatusInfo;
   powerSchedule: StatusInfo;
   primeSchedule: StatusInfo;
   rebootSchedule: StatusInfo;

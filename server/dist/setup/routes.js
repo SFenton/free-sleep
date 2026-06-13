@@ -1,5 +1,3 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="ca07c08e-ac96-5992-9ca4-451a00415d21")}catch(e){}}();
 import * as Sentry from '@sentry/node';
 import express from 'express';
 import path from 'path';
@@ -10,6 +8,7 @@ import execute from '../routes/execute/execute.js';
 import jobs from '../routes/jobs/jobs.js';
 import settings from '../routes/settings/settings.js';
 import services from '../routes/services/services.js';
+import mqttSettings from '../routes/mqttSettings/mqttSettings.js';
 import schedules from '../routes/schedules/schedules.js';
 import sleep from '../routes/metrics/sleep.js';
 import movement from '../routes/metrics/movement.js';
@@ -29,6 +28,7 @@ export default function (app) {
     app.use('/api/', jobs);
     app.use('/api/', settings);
     app.use('/api/', services);
+    app.use('/api/', mqttSettings);
     app.use('/api/metrics/', movement);
     app.use('/api/metrics/', sleep);
     app.use('/api/metrics/', vitals);
@@ -67,4 +67,3 @@ export default function (app) {
     logger.debug('Registered routes!');
 }
 //# sourceMappingURL=routes.js.map
-//# debugId=ca07c08e-ac96-5992-9ca4-451a00415d21

@@ -16,11 +16,13 @@ import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
 import { setupSentryTags } from './setupSentryTags.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
+import { startMqttService } from './mqtt/mqttService.js';
 
 const port = 3000;
 const app = express();
 let server: Server | undefined;
 let frankenMonitor: FrankenMonitor | undefined;
+let mqttService: ReturnType<typeof startMqttService>;
 
 async function disconnectPrisma() {
   try {
@@ -59,6 +61,7 @@ async function gracefulShutdown(signal: string) {
   }, 15_000);
   logger.debug('Stopping node-schedule');
   await schedule.gracefulShutdown();
+  await mqttService?.stop();
   await disconnectPrisma();
 
 
@@ -115,6 +118,7 @@ async function startServer() {
   });
   serverStatus.status.express.status = 'healthy';
   serverStatus.status.logger.status = 'healthy';
+  mqttService = startMqttService();
 
   // Initialize Franken once before listening
   if (!config.remoteDevMode) {

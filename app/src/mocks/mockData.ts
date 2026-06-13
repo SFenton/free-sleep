@@ -8,6 +8,7 @@ import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { VitalsRecord } from '@api/vitals.ts';
 import type { ServerStatus } from '@api/serverStatusSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
+import type { MqttSettings } from '@api/mqttSettings.ts';
 
 type Side = 'left' | 'right';
 
@@ -307,6 +308,18 @@ const createServices = (): Services => ({
   },
 });
 
+const createMqttSettings = (): MqttSettings => ({
+  enabled: true,
+  url: 'mqtt://homeassistant.local:1883',
+  username: '',
+  password: '',
+  deviceId: 'LullabyPillowBed',
+  topicPrefix: 'free-sleep/LullabyPillowBed',
+  homeAssistantDiscovery: true,
+  discoveryPrefix: 'homeassistant',
+  pollIntervalMs: 30_000,
+});
+
 const createDeviceStatus = (): DeviceStatus => ({
   left: {
     currentTemperatureLevel: 4,
@@ -383,6 +396,12 @@ const createServerStatus = (): ServerStatus => ({
     status: 'healthy',
     description: 'Application logs',
     message: '',
+  },
+  mqtt: {
+    name: 'MQTT',
+    status: 'not_started',
+    description: 'MQTT broker connection and Home Assistant integration',
+    message: 'MQTT disabled in demo mode',
   },
   powerSchedule: {
     name: 'Power schedule',
@@ -484,6 +503,7 @@ const vitalsRecords = createVitalsRecords();
 let schedules = createSchedules();
 let settings = createSettings();
 let services = createServices();
+let mqttSettings = createMqttSettings();
 let deviceStatus = createDeviceStatus();
 let serverStatus = createServerStatus();
 let logsStore = createLogs();
@@ -511,6 +531,14 @@ export const getServices = () => services;
 export const updateServices = (partial: Partial<Services>) => {
   services = mergeDeep(clone(services), partial) as Services;
   return services;
+};
+
+export const getMqttSettings = () => mqttSettings;
+export const updateMqttSettings = (partial: Partial<MqttSettings>) => {
+  mqttSettings = mergeDeep(clone(mqttSettings), partial) as MqttSettings;
+  serverStatus.mqtt.status = mqttSettings.enabled ? 'healthy' : 'not_started';
+  serverStatus.mqtt.message = mqttSettings.enabled ? '' : 'MQTT disabled in demo mode';
+  return mqttSettings;
 };
 
 export const getSchedules = () => schedules;
@@ -596,4 +624,3 @@ export const handleJobs = (jobs: Jobs) => {
     appendLogEntry('free-sleep.log', `[${timestamp}] INFO Job executed: ${job}`);
   });
 };
-

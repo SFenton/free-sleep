@@ -4,6 +4,8 @@ import type { Jobs } from '@api/jobs.ts';
 import {
   getServices,
   updateServices,
+  getMqttSettings,
+  updateMqttSettings,
   getSchedules,
   updateSchedules,
   getSettings,
@@ -50,6 +52,16 @@ export const handlers = [
   http.post('/api/services', async ({ request }) => {
     const body = (await request.json()) as Partial<ReturnType<typeof getServices>>;
     const updated = updateServices(body);
+    await delay(120);
+    return HttpResponse.json(deepClone(updated));
+  }),
+  http.get('/api/mqttSettings', async () => {
+    await delay(120);
+    return HttpResponse.json(deepClone(getMqttSettings()));
+  }),
+  http.post('/api/mqttSettings', async ({ request }) => {
+    const body = (await request.json()) as Partial<ReturnType<typeof getMqttSettings>>;
+    const updated = updateMqttSettings(body);
     await delay(120);
     return HttpResponse.json(deepClone(updated));
   }),
@@ -196,4 +208,3 @@ export const handlers = [
     });
   }),
 ];
-

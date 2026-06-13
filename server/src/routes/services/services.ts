@@ -7,28 +7,20 @@ import logger from '../../logger.js';
 const router = express.Router();
 
 import servicesDB from '../../db/services.js';
-import { ServicesSchema } from '../../db/servicesSchema.js';
+import { Services, ServicesSchema } from '../../db/servicesSchema.js';
 import { initSentry } from '../../instrument.js';
 import { setupSentryTags } from '../../setupSentryTags.js';
+import { DeepPartial } from 'ts-essentials';
+import { ZodError } from 'zod';
 
-router.get('/services', async (req: Request, res: Response) => {
-  await servicesDB.read();
-  res.json(servicesDB.data);
-});
-
-
-router.post('/services', async (req: Request, res: Response) => {
-  const { body } = req;
-  const validationResult = ServicesSchema.deepPartial().safeParse(body);
+export async function updateServices(servicesUpdate: DeepPartial<Services>) {
+  const validationResult = ServicesSchema.deepPartial().safeParse(servicesUpdate);
   if (!validationResult.success) {
     logger.error('Invalid services update:', validationResult.error);
-    res.status(400).json({
-      error: 'Invalid request data',
-      details: validationResult?.error?.errors,
-    });
-    return;
+    throw validationResult.error;
   }
 
+  const body = validationResult.data;
   if (body?.sentryLogging?.enabled === false) {
     logger.debug('Disabling sentry...');
     void Sentry.close();
@@ -42,7 +34,27 @@ router.post('/services', async (req: Request, res: Response) => {
   _.merge(servicesDB.data, body);
   await servicesDB.write();
 
-  res.status(200).json(servicesDB.data);
+  return servicesDB.data;
+}
+
+router.get('/services', async (req: Request, res: Response) => {
+  await servicesDB.read();
+  res.json(servicesDB.data);
+});
+
+
+router.post('/services', async (req: Request, res: Response) => {
+  const { body } = req;
+  try {
+    const data = await updateServices(body as DeepPartial<Services>);
+    res.status(200).json(data);
+  } catch (error) {
+    if (!(error instanceof ZodError)) throw error;
+    res.status(400).json({
+      error: 'Invalid request data',
+      details: error.errors,
+    });
+  }
 });
 
 
