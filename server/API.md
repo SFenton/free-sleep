@@ -375,7 +375,7 @@ Home Assistant MQTT discovery publishes controls and sensors for each side, incl
 
 Schedules are intentionally exposed as summary sensors plus full JSON instead of one Home Assistant entity per editable field. Free Sleep's weekly schedule shape is nested (`side -> day -> power/alarm/temperature entries`), so field-by-field MQTT discovery would create a large and brittle set of controls. For Home Assistant-owned scheduling, keep Free Sleep schedules disabled or empty and use HA automations to publish the existing control topics (`<prefix>/<left|right>/power/set`, `<prefix>/<left|right>/temperature/set`, `<prefix>/alarm/set`) or write the complete schedule JSON to `<prefix>/schedules/set`.
 
-Web edits to Free Sleep settings, schedules, and services write the LowDB files first. The MQTT client watches those files and republishes the latest retained state to Home Assistant immediately after the write, rather than waiting for the next full refresh interval. Presence updates and manual sleep-record edits also notify MQTT immediately. Latest vitals and movement metrics are sampled on the full refresh interval because this server only reads those records; it does not own a write event for them.
+Web edits to Free Sleep settings, schedules, and services write the LowDB files first. The MQTT client watches those files and republishes the latest retained state to Home Assistant immediately after the write, rather than waiting for the next full refresh interval. Presence updates, Wi-Fi strength samples, and manual sleep-record edits also notify MQTT immediately. Latest vitals and movement metrics are sampled on the full refresh interval because this server only reads those records; it does not own a write event for them.
 
 ---
 

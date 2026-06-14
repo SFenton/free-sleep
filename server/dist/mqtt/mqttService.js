@@ -20,7 +20,7 @@ import { connectFranken } from '../8sleep/frankenServer.js';
 import { executeFunction, frankenCommands } from '../8sleep/deviceApi.js';
 import { executeAlarm } from '../jobs/alarmScheduler.js';
 import { AlarmJobSchema } from '../db/schedulesSchema.js';
-import { onMetricsUpdated, onPresenceUpdated } from '../events/stateUpdateEvents.js';
+import { onMetricsUpdated, onPresenceUpdated, onWifiStrengthUpdated } from '../events/stateUpdateEvents.js';
 import { loadLatestMovementBySide, loadLatestSleepBySide, loadLatestVitalsBySide, loadMovementData, loadSleepData, loadVitalsData, loadVitalsSummaryData, } from '../routes/metrics/metricQueries.js';
 import { buildHomeAssistantDiscoveryMessages } from './homeAssistantDiscovery.js';
 import { wait } from '../8sleep/promises.js';
@@ -104,6 +104,7 @@ class MqttService {
     lowDbStatePublishTimeout;
     unsubscribeMetricsUpdated;
     unsubscribePresenceUpdated;
+    unsubscribeWifiStrengthUpdated;
     isPublishing = false;
     publishAllStatesRequested = false;
     settings;
@@ -144,13 +145,16 @@ class MqttService {
         }, LOWDB_STATE_PUBLISH_DEBOUNCE_MS);
     }
     startStateUpdateSubscriptions() {
-        if (this.unsubscribeMetricsUpdated || this.unsubscribePresenceUpdated)
+        if (this.unsubscribeMetricsUpdated || this.unsubscribePresenceUpdated || this.unsubscribeWifiStrengthUpdated)
             return;
         this.unsubscribeMetricsUpdated = onMetricsUpdated(() => {
             void this.runPublisher('latest metrics', () => this.publishLatestMetrics());
         });
         this.unsubscribePresenceUpdated = onPresenceUpdated(() => {
             void this.runPublisher('presence', () => this.publishPresence());
+        });
+        this.unsubscribeWifiStrengthUpdated = onWifiStrengthUpdated(signal => {
+            void this.runPublisher('wifi strength', () => this.publish('wifiStrength/state', signal, true));
         });
     }
     async configure(settings) {

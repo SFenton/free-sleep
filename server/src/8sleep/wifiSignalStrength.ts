@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import logger from '../logger.js';
+import { notifyWifiStrengthUpdated } from '../events/stateUpdateEvents.js';
 
 function execAsync(cmd: string) {
   return new Promise((resolve) => {
@@ -37,8 +38,9 @@ export async function loadWifiSignalStrength() {
 
     const parts = activeLine.split(':');
     const signal = Number(parts[2]) || 0;
-
+    const previousSignal = WIFI_SIGNAL_STRENGTH;
     WIFI_SIGNAL_STRENGTH = signal;
+    if (WIFI_SIGNAL_STRENGTH !== previousSignal) notifyWifiStrengthUpdated(WIFI_SIGNAL_STRENGTH);
     return WIFI_SIGNAL_STRENGTH;
   } catch (error) {
     logger.error(error);
