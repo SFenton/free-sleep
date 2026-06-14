@@ -1,8 +1,8 @@
 export const SCHEDULE_TEMPERATURE_STAGE_KEYS = ['bedtime', 'asleep', 'dawn'];
 export const SCHEDULE_TEMPERATURE_STAGE_LABELS = {
-    bedtime: 'Bedtime Temperature',
-    asleep: 'Asleep Temperature',
-    dawn: 'Dawn Temperature',
+    bedtime: 'Bedtime Level',
+    asleep: 'Asleep Level',
+    dawn: 'Dawn Level',
 };
 export const SCHEDULE_TEMPERATURE_STAGE_COMMANDS = {
     bedtimeTemperatureF: 'bedtime',

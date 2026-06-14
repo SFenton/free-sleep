@@ -7,9 +7,9 @@ export const SCHEDULE_TEMPERATURE_STAGE_KEYS = ['bedtime', 'asleep', 'dawn'] as 
 export type ScheduleTemperatureStage = (typeof SCHEDULE_TEMPERATURE_STAGE_KEYS)[number];
 
 export const SCHEDULE_TEMPERATURE_STAGE_LABELS = {
-  bedtime: 'Bedtime Temperature',
-  asleep: 'Asleep Temperature',
-  dawn: 'Dawn Temperature',
+  bedtime: 'Bedtime Level',
+  asleep: 'Asleep Level',
+  dawn: 'Dawn Level',
 } satisfies Record<ScheduleTemperatureStage, string>;
 
 export const SCHEDULE_TEMPERATURE_STAGE_COMMANDS: Record<string, ScheduleTemperatureStage> = {

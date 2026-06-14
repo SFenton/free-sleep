@@ -23,6 +23,55 @@ const topic = (topicPrefix: string, path: string) => `${topicPrefix}/${path}`;
 
 const sideName = (settings: Settings | undefined, side: Side) => settings?.[side]?.name || side;
 
+const FREE_SLEEP_MIN_TEMPERATURE_F = 55;
+const FREE_SLEEP_MAX_TEMPERATURE_F = 110;
+const FREE_SLEEP_LEVEL_MIN = -10;
+const FREE_SLEEP_LEVEL_MAX = 10;
+const FREE_SLEEP_TEMPERATURE_RANGE_F = FREE_SLEEP_MAX_TEMPERATURE_F - FREE_SLEEP_MIN_TEMPERATURE_F;
+const FREE_SLEEP_LEVEL_RANGE = FREE_SLEEP_LEVEL_MAX - FREE_SLEEP_LEVEL_MIN;
+
+const TEMPERATURE_F_TO_LEVEL_EXPRESSION = [
+  `(f - ${FREE_SLEEP_MIN_TEMPERATURE_F})`,
+  `/ ${FREE_SLEEP_TEMPERATURE_RANGE_F}`,
+  `* ${FREE_SLEEP_LEVEL_RANGE}`,
+  `+ ${FREE_SLEEP_LEVEL_MIN}`,
+].join(' ');
+
+const LEVEL_TO_TEMPERATURE_F_EXPRESSION = [
+  `(clamped - ${FREE_SLEEP_LEVEL_MIN})`,
+  `/ ${FREE_SLEEP_LEVEL_RANGE}`,
+  `* ${FREE_SLEEP_TEMPERATURE_RANGE_F}`,
+  `+ ${FREE_SLEEP_MIN_TEMPERATURE_F}`,
+].join(' ');
+
+const TEMPERATURE_F_TO_LEVEL_TEMPLATE = [
+  '{% set f = value | float(none) %}',
+  '{% if f is not none %}',
+  `{{ (${TEMPERATURE_F_TO_LEVEL_EXPRESSION}) | round(0) | int }}`,
+  '{% endif %}',
+].join('');
+
+const LEVEL_TO_TEMPERATURE_F_TEMPLATE = [
+  '{% set level = value | float(0) %}',
+  `{% set clamped = ${FREE_SLEEP_LEVEL_MAX} if level > ${FREE_SLEEP_LEVEL_MAX} `,
+  `else ${FREE_SLEEP_LEVEL_MIN} if level < ${FREE_SLEEP_LEVEL_MIN} else level %}`,
+  `{{ (${LEVEL_TO_TEMPERATURE_F_EXPRESSION}) | round(0) | int }}`,
+].join('');
+
+const temperatureLevelNumberPayload = (name: string, stateTopic: string, commandTopic: string) => ({
+  name,
+  state_topic: stateTopic,
+  command_topic: commandTopic,
+  value_template: TEMPERATURE_F_TO_LEVEL_TEMPLATE,
+  command_template: LEVEL_TO_TEMPERATURE_F_TEMPLATE,
+  min: FREE_SLEEP_LEVEL_MIN,
+  max: FREE_SLEEP_LEVEL_MAX,
+  step: 1,
+  mode: 'slider',
+  unit_of_measurement: '°',
+  icon: 'mdi:thermometer-lines',
+});
+
 export function buildHomeAssistantDiscoveryMessages({
   deviceId,
   topicPrefix,
@@ -117,27 +166,19 @@ export function buildHomeAssistantDiscoveryMessages({
       icon: 'mdi:power',
     });
     add('number', `${sideId}_target_temperature`, {
-      name: `${name} Target Temperature`,
-      state_topic: topic(topicPrefix, `${side}/targetTemperatureF/state`),
-      command_topic: topic(topicPrefix, `${side}/temperature/set`),
-      min: 55,
-      max: 110,
-      step: 1,
-      mode: 'slider',
-      device_class: 'temperature',
-      unit_of_measurement: '°F',
+      ...temperatureLevelNumberPayload(
+        `${name} Target Level`,
+        topic(topicPrefix, `${side}/targetTemperatureF/state`),
+        topic(topicPrefix, `${side}/temperature/set`),
+      ),
     });
     for (const stage of SCHEDULE_TEMPERATURE_STAGE_KEYS) {
       add('number', `${sideId}_${stage}_temperature`, {
-        name: `${name} ${SCHEDULE_TEMPERATURE_STAGE_LABELS[stage]}`,
-        state_topic: topic(topicPrefix, `${side}/schedule/${stage}TemperatureF/state`),
-        command_topic: topic(topicPrefix, `${side}/schedule/${stage}TemperatureF/set`),
-        min: 55,
-        max: 110,
-        step: 1,
-        mode: 'slider',
-        device_class: 'temperature',
-        unit_of_measurement: '°F',
+        ...temperatureLevelNumberPayload(
+          `${name} ${SCHEDULE_TEMPERATURE_STAGE_LABELS[stage]}`,
+          topic(topicPrefix, `${side}/schedule/${stage}TemperatureF/state`),
+          topic(topicPrefix, `${side}/schedule/${stage}TemperatureF/set`),
+        ),
       });
     }
     add('sensor', `${sideId}_current_temperature`, {
