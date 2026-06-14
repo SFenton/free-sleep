@@ -96,6 +96,8 @@ The server is composed of the following key components:
 
 MQTT is on by default in the Pod firmware and connects to `mqtt://homeassistant.local:1883`. Configure the broker, credentials, enable toggle, topic prefix, device ID, Home Assistant discovery, and poll interval from the web app under Settings > MQTT; changes are saved persistently and reconnect the MQTT client immediately. Disabling MQTT from the toggle disconnects the broker client. The default topic prefix is unique per Pod (`free-sleep/<pod-id>`), where `<pod-id>` is a persisted generated three-word ID like `LullabyPillowBed`. The built-in word list has more than 4 million possible combinations, so multiple jailbroken Pods can share the same broker without controlling each other. `/persistent/free-sleep-data/mqtt.env` remains supported as first-run/bootstrap configuration before the UI settings DB exists. Home Assistant discovery is enabled by default and publishes under `homeassistant/`.
 
+Firmware-side bed changes observed by the Franken monitor, including physical controls, republish MQTT device status without waiting for the full MQTT refresh interval. Gesture-capable covers are checked every 2 seconds; other covers are checked every 5 seconds.
+
 Common settings:
 
 | Variable | Default | Description |

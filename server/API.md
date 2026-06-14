@@ -354,6 +354,8 @@ MQTT is enabled by default in the Pod firmware and connects to `mqtt://homeassis
 
 When enabled, the server publishes retained state under the topic prefix:
 
+MQTT also republishes device status when the Franken monitor observes firmware-side changes, such as physical bed controls, instead of waiting for the full MQTT refresh interval. Gesture-capable covers are checked every 2 seconds; other covers are checked every 5 seconds. `MQTT_POLL_INTERVAL_MS` remains the full state refresh interval for settings, schedules, services, server status, presence, and latest metrics.
+
 | REST/API surface | MQTT state topic | MQTT command/request topic |
 | --- | --- | --- |
 | `/api/deviceStatus` | `<prefix>/deviceStatus/state` and per-side granular topics | `<prefix>/deviceStatus/set`, `<prefix>/<left|right>/temperature/set`, `<prefix>/<left|right>/power/set` |

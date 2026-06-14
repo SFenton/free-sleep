@@ -1,4 +1,5 @@
 import moment from 'moment-timezone';
+import _ from 'lodash';
 import logger from '../logger.js';
 import settingsDB from '../db/settings.js';
 import { connectFranken } from './frankenServer.js';
@@ -9,6 +10,10 @@ import { Gesture, GestureSchema } from '../db/settingsSchema.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { DeepPartial } from 'ts-essentials';
 import serverStatus from '../serverStatus.js';
+import { publishObservedMqttDeviceStatus } from '../mqtt/mqttService.js';
+
+const GESTURE_STATUS_POLL_MS = 2_000;
+const DEVICE_STATUS_POLL_MS = 5_000;
 
 
 
@@ -42,9 +47,13 @@ export class FrankenMonitor {
   }
 
   private async processGesture(side: Side, gesture: Gesture) {
+    if (!this.deviceStatus) {
+      logger.warn('Missing current deviceStatus, skipping gesture...');
+      return;
+    }
     const behavior = settingsDB.data[side].taps[gesture];
     if (behavior.type === 'temperature') {
-      const currentTemperatureTarget = this.deviceStatus![side].targetTemperatureF;
+      const currentTemperatureTarget = this.deviceStatus[side].targetTemperatureF;
       let newTemperatureTargetF;
       const change = behavior.amount;
       if (behavior.change === 'increment') {
@@ -60,13 +69,15 @@ export class FrankenMonitor {
     }
   }
 
-  private processGesturesForSide(nextDeviceStatus: DeviceStatus, side: Side) {
+  private async processGesturesForSide(nextDeviceStatus: DeviceStatus, side: Side) {
     try {
+      const gestureUpdates: Promise<void>[] = [];
       for (const gesture of GestureSchema.options) {
         if (nextDeviceStatus[side].taps?.[gesture] !== this?.deviceStatus?.[side].taps?.[gesture]) {
-          this.processGesture(side, gesture);
+          gestureUpdates.push(this.processGesture(side, gesture));
         }
       }
+      await Promise.all(gestureUpdates);
     } catch (error) {
       logger.error(error);
     }
@@ -78,8 +89,15 @@ export class FrankenMonitor {
       return;
     }
 
-    this.processGesturesForSide(nextDeviceStatus, 'left');
-    this.processGesturesForSide(nextDeviceStatus, 'right');
+    await Promise.all([
+      this.processGesturesForSide(nextDeviceStatus, 'left'),
+      this.processGesturesForSide(nextDeviceStatus, 'right'),
+    ]);
+  }
+
+  private async publishObservedDeviceStatus(nextDeviceStatus: DeviceStatus) {
+    if (_.isEqual(this.deviceStatus, nextDeviceStatus)) return;
+    await publishObservedMqttDeviceStatus(nextDeviceStatus);
   }
 
 
@@ -87,27 +105,27 @@ export class FrankenMonitor {
     const franken = await connectFranken();
     this.deviceStatus = await franken.getDeviceStatus(false);
     let hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-    let waitTime = hasGestures ? 2_000 : 60_000;
+    let waitTime = hasGestures ? GESTURE_STATUS_POLL_MS : DEVICE_STATUS_POLL_MS;
     if (hasGestures) {
       this.deviceStatus = await franken.getDeviceStatus(true);
       logger.debug(`Gestures supported for ${this.deviceStatus.coverVersion}`);
     } else {
       logger.debug(`Gestures not supported for ${this.deviceStatus.coverVersion}`);
     }
-    // No point in querying device status every 3 seconds for checking the prime status...
     while (this.isRunning) {
       try {
         while (this.isRunning) {
           hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-          waitTime = hasGestures ? 2_000 : 60_000;
+          waitTime = hasGestures ? GESTURE_STATUS_POLL_MS : DEVICE_STATUS_POLL_MS;
           await wait(waitTime);
           if (!this.isRunning) break;
           const franken = await connectFranken();
           const nextDeviceStatus = await franken.getDeviceStatus(hasGestures);
           await settingsDB.read();
           if (hasGestures) {
-            this.processGestures(nextDeviceStatus);
+            await this.processGestures(nextDeviceStatus);
           }
+          await this.publishObservedDeviceStatus(nextDeviceStatus);
           this.deviceStatus = nextDeviceStatus;
           serverStatus.status.frankenMonitor.status = 'healthy';
           serverStatus.status.frankenMonitor.message = '';
@@ -124,4 +142,3 @@ export class FrankenMonitor {
     logger.debug('FrankenMonitor loop exited');
   }
 }
-

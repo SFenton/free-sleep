@@ -129,6 +129,10 @@ class MqttService {
     await this.configure(mqttSettingsDB.data);
   }
 
+  public async publishObservedDeviceStatus(deviceStatus: DeviceStatus) {
+    await this.runPublisher('observed device status', () => this.publishDeviceStatus(deviceStatus));
+  }
+
   public async configure(settings: MqttSettings) {
     const mqttSettings = normalizeMqttSettings(settings);
 
@@ -457,8 +461,8 @@ class MqttService {
     return franken.getDeviceStatus();
   }
 
-  private async publishDeviceStatus() {
-    const deviceStatus = await this.loadDeviceStatus();
+  private async publishDeviceStatus(observedDeviceStatus?: DeviceStatus) {
+    const deviceStatus = observedDeviceStatus || await this.loadDeviceStatus();
     await this.publish('deviceStatus/state', deviceStatus, true);
     await Promise.all(SideSchema.options.flatMap(side => [
       this.publish(`${side}/state`, deviceStatus[side], true),
@@ -588,4 +592,8 @@ export function startMqttService(): MqttService {
 
 export async function reloadMqttServiceSettings() {
   await mqttService?.reloadSettings();
+}
+
+export async function publishObservedMqttDeviceStatus(deviceStatus: DeviceStatus) {
+  await mqttService?.publishObservedDeviceStatus(deviceStatus);
 }
