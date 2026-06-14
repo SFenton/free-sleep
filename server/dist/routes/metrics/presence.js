@@ -3,6 +3,7 @@ import moment from 'moment-timezone';
 import { z, ZodError } from 'zod';
 import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
+import { notifyPresenceUpdated } from '../../events/stateUpdateEvents.js';
 const router = express.Router();
 const PresenceSideSchema = z.object({
     present: z.boolean(),
@@ -51,6 +52,7 @@ export async function updatePresenceData(update) {
         presenceData.right.present = data.right.present;
         presenceData.right.lastUpdatedAt = currentTime;
     }
+    notifyPresenceUpdated();
     return presenceData;
 }
 /**

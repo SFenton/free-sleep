@@ -20,6 +20,7 @@ import { connectFranken } from '../8sleep/frankenServer.js';
 import { executeFunction, frankenCommands } from '../8sleep/deviceApi.js';
 import { executeAlarm } from '../jobs/alarmScheduler.js';
 import { AlarmJobSchema } from '../db/schedulesSchema.js';
+import { onMetricsUpdated, onPresenceUpdated } from '../events/stateUpdateEvents.js';
 import { loadLatestMovementBySide, loadLatestSleepBySide, loadLatestVitalsBySide, loadMovementData, loadSleepData, loadVitalsData, loadVitalsSummaryData, } from '../routes/metrics/metricQueries.js';
 import { buildHomeAssistantDiscoveryMessages } from './homeAssistantDiscovery.js';
 import { wait } from '../8sleep/promises.js';
@@ -101,10 +102,14 @@ class MqttService {
     publishInterval;
     lowDbWatcher;
     lowDbStatePublishTimeout;
+    unsubscribeMetricsUpdated;
+    unsubscribePresenceUpdated;
     isPublishing = false;
+    publishAllStatesRequested = false;
     settings;
     async start() {
         this.startLowDbWatcher();
+        this.startStateUpdateSubscriptions();
         await this.reloadSettings();
     }
     async reloadSettings() {
@@ -137,6 +142,16 @@ class MqttService {
             this.lowDbStatePublishTimeout = undefined;
             void this.publishAllStates();
         }, LOWDB_STATE_PUBLISH_DEBOUNCE_MS);
+    }
+    startStateUpdateSubscriptions() {
+        if (this.unsubscribeMetricsUpdated || this.unsubscribePresenceUpdated)
+            return;
+        this.unsubscribeMetricsUpdated = onMetricsUpdated(() => {
+            void this.runPublisher('latest metrics', () => this.publishLatestMetrics());
+        });
+        this.unsubscribePresenceUpdated = onPresenceUpdated(() => {
+            void this.runPublisher('presence', () => this.publishPresence());
+        });
     }
     async configure(settings) {
         const mqttSettings = normalizeMqttSettings(settings);
@@ -419,20 +434,25 @@ class MqttService {
         }
     }
     async publishAllStates() {
-        if (this.isPublishing)
+        if (this.isPublishing) {
+            this.publishAllStatesRequested = true;
             return;
+        }
         this.isPublishing = true;
         try {
-            const deviceStatus = await this.runPublisher('device status', () => this.publishDeviceStatus());
-            const settings = await this.runPublisher('settings', () => this.publishSettings());
-            await this.runPublisher('schedules', () => this.publishSchedules());
-            await this.runPublisher('services', () => this.publishServices());
-            await this.runPublisher('server status', () => this.publishServerStatus());
-            await this.runPublisher('presence', () => this.publishPresence());
-            await this.runPublisher('latest metrics', () => this.publishLatestMetrics());
-            if (this.settings?.homeAssistantDiscovery) {
-                await this.runPublisher('Home Assistant discovery', () => this.publishHomeAssistantDiscovery(deviceStatus, settings));
-            }
+            do {
+                this.publishAllStatesRequested = false;
+                const deviceStatus = await this.runPublisher('device status', () => this.publishDeviceStatus());
+                const settings = await this.runPublisher('settings', () => this.publishSettings());
+                await this.runPublisher('schedules', () => this.publishSchedules());
+                await this.runPublisher('services', () => this.publishServices());
+                await this.runPublisher('server status', () => this.publishServerStatus());
+                await this.runPublisher('presence', () => this.publishPresence());
+                await this.runPublisher('latest metrics', () => this.publishLatestMetrics());
+                if (this.settings?.homeAssistantDiscovery) {
+                    await this.runPublisher('Home Assistant discovery', () => this.publishHomeAssistantDiscovery(deviceStatus, settings));
+                }
+            } while (this.publishAllStatesRequested);
         }
         finally {
             this.isPublishing = false;

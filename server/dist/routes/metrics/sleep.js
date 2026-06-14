@@ -3,6 +3,7 @@ import { sleepRecordSchema } from '../../db/sleepRecordsSchema.js';
 import { loadSleepRecords } from '../../db/loadSleepRecords.js';
 import { prisma } from '../../db/prisma.js';
 import { loadSleepData } from './metricQueries.js';
+import { notifyMetricsUpdated } from '../../events/stateUpdateEvents.js';
 const router = express.Router();
 router.get('/sleep', async (req, res) => {
     res.json(await loadSleepData(req.query));
@@ -58,11 +59,13 @@ router.put('/sleep/:id', async (req, res) => {
     });
     // Load and return the updated record
     const loadedNewRecord = await loadSleepRecords([dbUpdatedRecord]);
+    notifyMetricsUpdated();
     return res.json(loadedNewRecord[0]);
 });
 router.delete('/sleep/:id', async (req, res) => {
     const { id } = req.params;
     await prisma.sleep_records.delete({ where: { id: parseInt(id, 10) } });
+    notifyMetricsUpdated();
     res.status(204).send();
 });
 export default router;

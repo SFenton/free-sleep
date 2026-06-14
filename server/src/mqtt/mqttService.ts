@@ -23,6 +23,7 @@ import { connectFranken } from '../8sleep/frankenServer.js';
 import { executeFunction, frankenCommands, FrankenCommand } from '../8sleep/deviceApi.js';
 import { executeAlarm } from '../jobs/alarmScheduler.js';
 import { AlarmJobSchema } from '../db/schedulesSchema.js';
+import { onMetricsUpdated, onPresenceUpdated } from '../events/stateUpdateEvents.js';
 import {
   loadLatestMovementBySide,
   loadLatestSleepBySide,
@@ -124,11 +125,15 @@ class MqttService {
   private publishInterval?: NodeJS.Timeout;
   private lowDbWatcher?: ReturnType<typeof chokidar.watch>;
   private lowDbStatePublishTimeout?: NodeJS.Timeout;
+  private unsubscribeMetricsUpdated?: () => void;
+  private unsubscribePresenceUpdated?: () => void;
   private isPublishing = false;
+  private publishAllStatesRequested = false;
   private settings?: MqttSettings;
 
   public async start() {
     this.startLowDbWatcher();
+    this.startStateUpdateSubscriptions();
     await this.reloadSettings();
   }
 
@@ -163,6 +168,17 @@ class MqttService {
       this.lowDbStatePublishTimeout = undefined;
       void this.publishAllStates();
     }, LOWDB_STATE_PUBLISH_DEBOUNCE_MS);
+  }
+
+  private startStateUpdateSubscriptions() {
+    if (this.unsubscribeMetricsUpdated || this.unsubscribePresenceUpdated) return;
+
+    this.unsubscribeMetricsUpdated = onMetricsUpdated(() => {
+      void this.runPublisher('latest metrics', () => this.publishLatestMetrics());
+    });
+    this.unsubscribePresenceUpdated = onPresenceUpdated(() => {
+      void this.runPublisher('presence', () => this.publishPresence());
+    });
   }
 
   public async configure(settings: MqttSettings) {
@@ -460,19 +476,26 @@ class MqttService {
   }
 
   private async publishAllStates() {
-    if (this.isPublishing) return;
+    if (this.isPublishing) {
+      this.publishAllStatesRequested = true;
+      return;
+    }
+
     this.isPublishing = true;
     try {
-      const deviceStatus = await this.runPublisher('device status', () => this.publishDeviceStatus());
-      const settings = await this.runPublisher('settings', () => this.publishSettings());
-      await this.runPublisher('schedules', () => this.publishSchedules());
-      await this.runPublisher('services', () => this.publishServices());
-      await this.runPublisher('server status', () => this.publishServerStatus());
-      await this.runPublisher('presence', () => this.publishPresence());
-      await this.runPublisher('latest metrics', () => this.publishLatestMetrics());
-      if (this.settings?.homeAssistantDiscovery) {
-        await this.runPublisher('Home Assistant discovery', () => this.publishHomeAssistantDiscovery(deviceStatus, settings));
-      }
+      do {
+        this.publishAllStatesRequested = false;
+        const deviceStatus = await this.runPublisher('device status', () => this.publishDeviceStatus());
+        const settings = await this.runPublisher('settings', () => this.publishSettings());
+        await this.runPublisher('schedules', () => this.publishSchedules());
+        await this.runPublisher('services', () => this.publishServices());
+        await this.runPublisher('server status', () => this.publishServerStatus());
+        await this.runPublisher('presence', () => this.publishPresence());
+        await this.runPublisher('latest metrics', () => this.publishLatestMetrics());
+        if (this.settings?.homeAssistantDiscovery) {
+          await this.runPublisher('Home Assistant discovery', () => this.publishHomeAssistantDiscovery(deviceStatus, settings));
+        }
+      } while (this.publishAllStatesRequested);
     } finally {
       this.isPublishing = false;
     }

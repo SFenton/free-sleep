@@ -100,7 +100,7 @@ Firmware-side bed changes observed by the Franken monitor, including physical co
 
 Home Assistant discovery exposes Free Sleep schedules as next-event timestamp sensors per side: next power on, next power off, next alarm, and next temperature adjustment. Full schedule JSON is still published under `<prefix>/schedules/state` and can be replaced through `<prefix>/schedules/set`. If Home Assistant should own scheduling, keep Free Sleep schedules disabled or empty and let HA automations call the MQTT control topics instead of trying to edit each nested Free Sleep schedule field as an entity.
 
-Web edits to Free Sleep settings, schedules, and services write LowDB files. The MQTT client watches those files and republishes retained state to Home Assistant immediately after the write, so UI edits do not wait for the next full refresh interval.
+Web edits to Free Sleep settings, schedules, and services write LowDB files. The MQTT client watches those files and republishes retained state to Home Assistant immediately after the write, so UI edits do not wait for the next full refresh interval. Presence updates and manual sleep-record edits also notify MQTT immediately. Latest vitals and movement metrics are sampled on the full refresh interval because this server only reads those records; it does not own a write event for them.
 
 Common settings:
 
