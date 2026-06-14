@@ -2,6 +2,7 @@ import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 import { Settings } from '../db/settingsSchema.js';
 import { Side, SideSchema } from '../db/schedulesSchema.js';
 import { SCHEDULE_SUMMARY_KEYS, SCHEDULE_SUMMARY_LABELS } from './scheduleSummary.js';
+import { SCHEDULE_TEMPERATURE_STAGE_KEYS, SCHEDULE_TEMPERATURE_STAGE_LABELS } from './scheduleStageTemperatures.js';
 
 export interface DiscoveryMessage {
   topic: string;
@@ -126,6 +127,19 @@ export function buildHomeAssistantDiscoveryMessages({
       device_class: 'temperature',
       unit_of_measurement: '°F',
     });
+    for (const stage of SCHEDULE_TEMPERATURE_STAGE_KEYS) {
+      add('number', `${sideId}_${stage}_temperature`, {
+        name: `${name} ${SCHEDULE_TEMPERATURE_STAGE_LABELS[stage]}`,
+        state_topic: topic(topicPrefix, `${side}/schedule/${stage}TemperatureF/state`),
+        command_topic: topic(topicPrefix, `${side}/schedule/${stage}TemperatureF/set`),
+        min: 55,
+        max: 110,
+        step: 1,
+        mode: 'slider',
+        device_class: 'temperature',
+        unit_of_measurement: '°F',
+      });
+    }
     add('sensor', `${sideId}_current_temperature`, {
       name: `${name} Current Temperature`,
       state_topic: topic(topicPrefix, `${side}/currentTemperatureF/state`),

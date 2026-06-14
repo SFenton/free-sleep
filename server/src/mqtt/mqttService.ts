@@ -37,6 +37,13 @@ import {
 import { buildHomeAssistantDiscoveryMessages } from './homeAssistantDiscovery.js';
 import { wait } from '../8sleep/promises.js';
 import { buildScheduleSummary, scheduleEventAttributes, scheduleEventState, SCHEDULE_SUMMARY_KEYS } from './scheduleSummary.js';
+import {
+  buildScheduleTemperatureStageStates,
+  buildScheduleTemperatureStageUpdate,
+  SCHEDULE_TEMPERATURE_STAGE_COMMANDS,
+  SCHEDULE_TEMPERATURE_STAGE_KEYS,
+  ScheduleTemperatureStage,
+} from './scheduleStageTemperatures.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -286,6 +293,7 @@ class MqttService {
       '+/secondsRemaining/set',
       '+/alarmVibration/set',
       '+/awayMode/set',
+      '+/schedule/+/set',
       'ledBrightness/set',
       'prime/set',
       'alarm/clear/set',
@@ -395,9 +403,31 @@ class MqttService {
     });
   }
 
+  private async setScheduleStageTemperature(side: Side, stage: ScheduleTemperatureStage, payload: unknown) {
+    const temperatureF = Math.round(coerceNumber(payload));
+    if (temperatureF < 55 || temperatureF > 110) {
+      throw new Error('Schedule temperature must be between 55°F and 110°F');
+    }
+
+    await schedulesDB.read();
+    await updateSchedules(buildScheduleTemperatureStageUpdate(schedulesDB.data, side, stage, temperatureF));
+  }
+
   private async executeSideCommand(relativeTopic: string, payload: unknown) {
-    const [side, command, action] = relativeTopic.split('/');
-    if (!SideSchema.safeParse(side).success || action !== 'set') {
+    const parts = relativeTopic.split('/');
+    const [side, command, action] = parts;
+    if (!SideSchema.safeParse(side).success) {
+      throw new Error(`Unsupported MQTT topic: ${relativeTopic}`);
+    }
+
+    if (parts.length === 4 && command === 'schedule' && parts[3] === 'set') {
+      const stage = SCHEDULE_TEMPERATURE_STAGE_COMMANDS[parts[2]];
+      if (!stage) throw new Error(`Unsupported MQTT schedule command: ${relativeTopic}`);
+      await this.setScheduleStageTemperature(side as Side, stage, payload);
+      return;
+    }
+
+    if (parts.length !== 3 || action !== 'set') {
       throw new Error(`Unsupported MQTT topic: ${relativeTopic}`);
     }
 
@@ -551,15 +581,23 @@ class MqttService {
     await schedulesDB.read();
     await settingsDB.read();
     const scheduleSummary = buildScheduleSummary(schedulesDB.data, settingsDB.data);
+    const scheduleTemperatureStages = buildScheduleTemperatureStageStates(schedulesDB.data);
     await this.publish('schedules/state', schedulesDB.data, true);
     await this.publish('schedules/summary/state', scheduleSummary, true);
-    await Promise.all(SideSchema.options.flatMap(side => SCHEDULE_SUMMARY_KEYS.flatMap(summaryKey => {
-      const event = scheduleSummary[side][summaryKey];
-      return [
-        this.publish(`${side}/schedule/${summaryKey}/state`, scheduleEventState(event), true),
-        this.publish(`${side}/schedule/${summaryKey}/attributes`, scheduleEventAttributes(event), true),
-      ];
-    })));
+    await Promise.all(SideSchema.options.flatMap(side => [
+      ...SCHEDULE_SUMMARY_KEYS.flatMap(summaryKey => {
+        const event = scheduleSummary[side][summaryKey];
+        return [
+          this.publish(`${side}/schedule/${summaryKey}/state`, scheduleEventState(event), true),
+          this.publish(`${side}/schedule/${summaryKey}/attributes`, scheduleEventAttributes(event), true),
+        ];
+      }),
+      ...SCHEDULE_TEMPERATURE_STAGE_KEYS.map(stage => this.publish(
+        `${side}/schedule/${stage}TemperatureF/state`,
+        scheduleTemperatureStages[side][stage],
+        true,
+      )),
+    ]));
   }
 
   private async publishServices() {
