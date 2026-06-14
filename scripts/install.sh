@@ -60,21 +60,37 @@ mkdir -p /persistent/free-sleep-data/lowdb/
 
 SRC_FILE="/opt/eight/bin/frank.sh"
 DEST_FILE="/persistent/free-sleep-data/dac_sock_path.txt"
+KNOWN_DAC_SOCK_PATHS=(
+  "/persistent/deviceinfo/dac.sock"
+  "/deviceinfo/dac.sock"
+)
 
 if [ -f "$DEST_FILE" ]; then
   echo "Destination file $DEST_FILE already exists, skipping copy."
 else
+  result=""
   if [ -r "$SRC_FILE" ]; then
     echo "Found $SRC_FILE, searching for dac.sock path..."
     result=$(grep -oP '(?<=DAC_SOCKET=)[^ ]*dac\.sock' "$SRC_FILE" || true)
-    if [ -n "$result" ]; then
-      echo "$result" > "$DEST_FILE"
-      echo "DAC socket path saved to $DEST_FILE"
-    else
-      echo "No dac.sock path found in $SRC_FILE, skipping write."
-    fi
   else
     echo "File $SRC_FILE not found or not readable, skipping."
+  fi
+
+  if [ -z "$result" ]; then
+    echo "Checking known dac.sock paths..."
+    for path in "${KNOWN_DAC_SOCK_PATHS[@]}"; do
+      if [ -S "$path" ]; then
+        result="$path"
+        break
+      fi
+    done
+  fi
+
+  if [ -n "$result" ]; then
+    echo "$result" > "$DEST_FILE"
+    echo "DAC socket path saved to $DEST_FILE"
+  else
+    echo "No dac.sock path found, skipping write."
   fi
 fi
 
