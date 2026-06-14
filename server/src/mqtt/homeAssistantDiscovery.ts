@@ -1,6 +1,7 @@
 import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 import { Settings } from '../db/settingsSchema.js';
 import { Side, SideSchema } from '../db/schedulesSchema.js';
+import { SCHEDULE_SUMMARY_KEYS, SCHEDULE_SUMMARY_LABELS } from './scheduleSummary.js';
 
 export interface DiscoveryMessage {
   topic: string;
@@ -182,6 +183,16 @@ export function buildHomeAssistantDiscoveryMessages({
       state_topic: topic(topicPrefix, `${side}/movement/state`),
       icon: 'mdi:motion-sensor',
     });
+
+    for (const summaryKey of SCHEDULE_SUMMARY_KEYS) {
+      add('sensor', `${sideId}_${summaryKey}`, {
+        name: `${name} ${SCHEDULE_SUMMARY_LABELS[summaryKey]}`,
+        state_topic: topic(topicPrefix, `${side}/schedule/${summaryKey}/state`),
+        json_attributes_topic: topic(topicPrefix, `${side}/schedule/${summaryKey}/attributes`),
+        device_class: 'timestamp',
+        icon: 'mdi:calendar-clock',
+      });
+    }
   }
 
   return messages;

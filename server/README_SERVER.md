@@ -98,6 +98,8 @@ MQTT is on by default in the Pod firmware and connects to `mqtt://homeassistant.
 
 Firmware-side bed changes observed by the Franken monitor, including physical controls, republish MQTT device status without waiting for the full MQTT refresh interval. The monitor checks device status every second.
 
+Home Assistant discovery exposes Free Sleep schedules as next-event timestamp sensors per side: next power on, next power off, next alarm, and next temperature adjustment. Full schedule JSON is still published under `<prefix>/schedules/state` and can be replaced through `<prefix>/schedules/set`. If Home Assistant should own scheduling, keep Free Sleep schedules disabled or empty and let HA automations call the MQTT control topics instead of trying to edit each nested Free Sleep schedule field as an entity.
+
 Common settings:
 
 | Variable | Default | Description |

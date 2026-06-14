@@ -21,6 +21,7 @@ import { AlarmJobSchema } from '../db/schedulesSchema.js';
 import { loadLatestMovementBySide, loadLatestSleepBySide, loadLatestVitalsBySide, loadMovementData, loadSleepData, loadVitalsData, loadVitalsSummaryData, } from '../routes/metrics/metricQueries.js';
 import { buildHomeAssistantDiscoveryMessages } from './homeAssistantDiscovery.js';
 import { wait } from '../8sleep/promises.js';
+import { buildScheduleSummary, scheduleEventAttributes, scheduleEventState, SCHEDULE_SUMMARY_KEYS } from './scheduleSummary.js';
 const isJsonObject = (value) => {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 };
@@ -447,7 +448,17 @@ class MqttService {
     }
     async publishSchedules() {
         await schedulesDB.read();
+        await settingsDB.read();
+        const scheduleSummary = buildScheduleSummary(schedulesDB.data, settingsDB.data);
         await this.publish('schedules/state', schedulesDB.data, true);
+        await this.publish('schedules/summary/state', scheduleSummary, true);
+        await Promise.all(SideSchema.options.flatMap(side => SCHEDULE_SUMMARY_KEYS.flatMap(summaryKey => {
+            const event = scheduleSummary[side][summaryKey];
+            return [
+                this.publish(`${side}/schedule/${summaryKey}/state`, scheduleEventState(event), true),
+                this.publish(`${side}/schedule/${summaryKey}/attributes`, scheduleEventAttributes(event), true),
+            ];
+        })));
     }
     async publishServices() {
         await servicesDB.read();

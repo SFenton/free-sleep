@@ -360,7 +360,7 @@ MQTT also republishes device status when the Franken monitor observes firmware-s
 | --- | --- | --- |
 | `/api/deviceStatus` | `<prefix>/deviceStatus/state` and per-side granular topics | `<prefix>/deviceStatus/set`, `<prefix>/<left|right>/temperature/set`, `<prefix>/<left|right>/power/set` |
 | `/api/settings` | `<prefix>/settings/state` | `<prefix>/settings/set`, `<prefix>/<left|right>/awayMode/set` |
-| `/api/schedules` | `<prefix>/schedules/state` | `<prefix>/schedules/set` |
+| `/api/schedules` | `<prefix>/schedules/state`, `<prefix>/schedules/summary/state`, per-side next-schedule timestamp topics | `<prefix>/schedules/set` |
 | `/api/services` | `<prefix>/services/state` | `<prefix>/services/set` |
 | `/api/serverStatus` | `<prefix>/serverStatus/state` | `<prefix>/request/serverStatus` |
 | `/api/metrics/presence` | `<prefix>/presence/state`, `<prefix>/<left|right>/presence/state` | `<prefix>/presence/set` |
@@ -371,7 +371,9 @@ MQTT also republishes device status when the Franken monitor observes firmware-s
 
 Request topics accept an optional JSON envelope: `{"requestId":"abc","params":{"side":"left","startTime":"2025-02-15T00:00:00Z"}}`. Responses are published to `<prefix>/responses/<resource>/<requestId>` when a `requestId` is supplied, otherwise `<prefix>/responses/<resource>`.
 
-Home Assistant MQTT discovery publishes controls and sensors for each side, including power, target temperature, current temperature, away mode, presence, alarm vibration, heart rate, HRV, breathing rate, movement, LED brightness, priming, WiFi strength, and water level.
+Home Assistant MQTT discovery publishes controls and sensors for each side, including power, target temperature, current temperature, away mode, presence, alarm vibration, heart rate, HRV, breathing rate, movement, next power on/off, next alarm, next temperature adjustment, LED brightness, priming, WiFi strength, and water level.
+
+Schedules are intentionally exposed as summary sensors plus full JSON instead of one Home Assistant entity per editable field. Free Sleep's weekly schedule shape is nested (`side -> day -> power/alarm/temperature entries`), so field-by-field MQTT discovery would create a large and brittle set of controls. For Home Assistant-owned scheduling, keep Free Sleep schedules disabled or empty and use HA automations to publish the existing control topics (`<prefix>/<left|right>/power/set`, `<prefix>/<left|right>/temperature/set`, `<prefix>/alarm/set`) or write the complete schedule JSON to `<prefix>/schedules/set`.
 
 ---
 

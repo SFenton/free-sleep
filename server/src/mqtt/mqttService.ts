@@ -33,6 +33,7 @@ import {
 } from '../routes/metrics/metricQueries.js';
 import { buildHomeAssistantDiscoveryMessages } from './homeAssistantDiscovery.js';
 import { wait } from '../8sleep/promises.js';
+import { buildScheduleSummary, scheduleEventAttributes, scheduleEventState, SCHEDULE_SUMMARY_KEYS } from './scheduleSummary.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -490,7 +491,17 @@ class MqttService {
 
   private async publishSchedules() {
     await schedulesDB.read();
+    await settingsDB.read();
+    const scheduleSummary = buildScheduleSummary(schedulesDB.data, settingsDB.data);
     await this.publish('schedules/state', schedulesDB.data, true);
+    await this.publish('schedules/summary/state', scheduleSummary, true);
+    await Promise.all(SideSchema.options.flatMap(side => SCHEDULE_SUMMARY_KEYS.flatMap(summaryKey => {
+      const event = scheduleSummary[side][summaryKey];
+      return [
+        this.publish(`${side}/schedule/${summaryKey}/state`, scheduleEventState(event), true),
+        this.publish(`${side}/schedule/${summaryKey}/attributes`, scheduleEventAttributes(event), true),
+      ];
+    })));
   }
 
   private async publishServices() {
