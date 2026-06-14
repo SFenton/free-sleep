@@ -1,6 +1,8 @@
+import path from 'path';
+import chokidar from 'chokidar';
 import mqtt from 'mqtt';
 import _ from 'lodash';
-import { normalizeMqttDeviceId, normalizeMqttTopicPrefix } from '../config.js';
+import config, { normalizeMqttDeviceId, normalizeMqttTopicPrefix } from '../config.js';
 import logger from '../logger.js';
 import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
@@ -27,6 +29,8 @@ const isJsonObject = (value) => {
 };
 const normalizeTopic = (value) => value.replace(/^\/+|\/+$/g, '');
 const mqttClientId = (settings) => `free-sleep-${settings.deviceId}`;
+const LOWDB_STATE_FILES = new Set(['settingsDB.json', 'schedulesDB.json', 'servicesDB.json']);
+const LOWDB_STATE_PUBLISH_DEBOUNCE_MS = 250;
 export const normalizeMqttSettings = (settings) => {
     const deviceId = normalizeMqttDeviceId(settings.deviceId);
     if (settings.enabled && !deviceId)
@@ -95,9 +99,12 @@ const toJsonObject = (payload) => {
 class MqttService {
     client;
     publishInterval;
+    lowDbWatcher;
+    lowDbStatePublishTimeout;
     isPublishing = false;
     settings;
     async start() {
+        this.startLowDbWatcher();
         await this.reloadSettings();
     }
     async reloadSettings() {
@@ -106,6 +113,30 @@ class MqttService {
     }
     async publishObservedDeviceStatus(deviceStatus) {
         await this.runPublisher('observed device status', () => this.publishDeviceStatus(deviceStatus));
+    }
+    startLowDbWatcher() {
+        if (this.lowDbWatcher)
+            return;
+        this.lowDbWatcher = chokidar.watch(config.lowDbFolder, { ignoreInitial: true });
+        this.lowDbWatcher.on('change', changedPath => {
+            const fileName = path.basename(changedPath);
+            if (!LOWDB_STATE_FILES.has(fileName))
+                return;
+            logger.info(`MQTT detected LowDB state change, publishing latest state: ${fileName}`);
+            this.queueLowDbStatePublish();
+        });
+        this.lowDbWatcher.on('error', error => {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error(`MQTT LowDB watcher error: ${message}`);
+        });
+    }
+    queueLowDbStatePublish() {
+        if (this.lowDbStatePublishTimeout)
+            clearTimeout(this.lowDbStatePublishTimeout);
+        this.lowDbStatePublishTimeout = setTimeout(() => {
+            this.lowDbStatePublishTimeout = undefined;
+            void this.publishAllStates();
+        }, LOWDB_STATE_PUBLISH_DEBOUNCE_MS);
     }
     async configure(settings) {
         const mqttSettings = normalizeMqttSettings(settings);
