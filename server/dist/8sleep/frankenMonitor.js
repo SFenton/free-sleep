@@ -9,8 +9,7 @@ import { GestureSchema } from '../db/settingsSchema.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import serverStatus from '../serverStatus.js';
 import { publishObservedMqttDeviceStatus } from '../mqtt/mqttService.js';
-const GESTURE_STATUS_POLL_MS = 2_000;
-const DEVICE_STATUS_POLL_MS = 5_000;
+const DEVICE_STATUS_POLL_MS = 1_000;
 export class FrankenMonitor {
     isRunning;
     deviceStatus;
@@ -94,7 +93,7 @@ export class FrankenMonitor {
         const franken = await connectFranken();
         this.deviceStatus = await franken.getDeviceStatus(false);
         let hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-        let waitTime = hasGestures ? GESTURE_STATUS_POLL_MS : DEVICE_STATUS_POLL_MS;
+        const waitTime = DEVICE_STATUS_POLL_MS;
         if (hasGestures) {
             this.deviceStatus = await franken.getDeviceStatus(true);
             logger.debug(`Gestures supported for ${this.deviceStatus.coverVersion}`);
@@ -106,7 +105,6 @@ export class FrankenMonitor {
             try {
                 while (this.isRunning) {
                     hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-                    waitTime = hasGestures ? GESTURE_STATUS_POLL_MS : DEVICE_STATUS_POLL_MS;
                     await wait(waitTime);
                     if (!this.isRunning)
                         break;
