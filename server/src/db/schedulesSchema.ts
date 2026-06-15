@@ -27,6 +27,8 @@ export const AlarmScheduleSchema = AlarmSchema.extend({
   alarmTemperature: TemperatureSchema,
 }).strict();
 
+export const AlarmSchedulesSchema = z.array(AlarmScheduleSchema);
+
 
 
 export const DailyScheduleSchema = z.object({
@@ -35,6 +37,7 @@ export const DailyScheduleSchema = z.object({
     TemperatureSchema,
   ),
   alarm: AlarmScheduleSchema,
+  alarms: AlarmSchedulesSchema,
   power: z.object({
     on: TimeSchema,
     off: TimeSchema,
@@ -67,6 +70,7 @@ export type Schedules = z.infer<typeof SchedulesSchema>;
 export type Alarm = z.infer<typeof AlarmSchema>;
 export type AlarmJob = z.infer<typeof AlarmJobSchema>;
 export type AlarmSchedule = z.infer<typeof AlarmScheduleSchema>;
+export type AlarmSchedules = z.infer<typeof AlarmSchedulesSchema>;
 export type Time = z.infer<typeof TimeSchema>;
 
 // eslint-disable-next-line @typescript-eslint/no-type-alias

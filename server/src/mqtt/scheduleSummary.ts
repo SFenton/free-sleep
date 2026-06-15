@@ -1,6 +1,7 @@
 import moment from 'moment-timezone';
 import { Settings } from '../db/settingsSchema.js';
 import { DailySchedule, DayOfWeek, Schedules, Side, Time } from '../db/schedulesSchema.js';
+import { dailyAlarmSchedules } from '../db/scheduleAlarms.js';
 import { DAYS_OF_WEEK, getDayIndexForSchedule, getDayOfWeekIndex } from '../jobs/utils.js';
 
 export type ScheduleEventType = 'power_on' | 'power_off' | 'alarm' | 'temperature';
@@ -14,6 +15,7 @@ export interface ScheduleEvent {
   executionDay: DayOfWeek;
   time: Time;
   timestamp: string;
+  alarmIndex?: number;
   temperatureF?: number;
   enabled: boolean;
 }
@@ -66,6 +68,7 @@ const buildScheduleEvent = (
   executionDayIndex: number,
   time: Time,
   temperatureF?: number,
+  alarmIndex?: number,
 ): ScheduleEvent => ({
   type,
   source: 'schedule',
@@ -74,6 +77,7 @@ const buildScheduleEvent = (
   executionDay: dayFromIndex(executionDayIndex),
   time,
   timestamp: nextOccurrence(timeZone, executionDayIndex, time).toISOString(),
+  alarmIndex,
   temperatureF,
   enabled: true,
 });
@@ -102,6 +106,7 @@ const buildAlarmOverrideEvent = (settings: Settings, side: Side): ScheduleEvent 
 
 const summarizeDailySchedule = (
   timeZone: string,
+  alarmsEnabled: boolean,
   side: Side,
   scheduleDay: DayOfWeek,
   dailySchedule: DailySchedule,
@@ -120,21 +125,26 @@ const summarizeDailySchedule = (
       buildScheduleEvent(timeZone, 'power_off', side, scheduleDay, powerOffDayIndex, dailySchedule.power.off)
     );
 
-    if (dailySchedule.alarm.enabled) {
-      summary.nextAlarm = earlierEvent(
-        summary.nextAlarm,
-        buildScheduleEvent(
-          timeZone,
-          'alarm',
-          side,
-          scheduleDay,
-          powerOffDayIndex,
-          dailySchedule.alarm.time,
-          dailySchedule.alarm.alarmTemperature
-        )
-      );
-    }
   }
+
+  const alarmDayIndex = getDayIndexForSchedule(scheduleDay, dailySchedule.power.off);
+  dailyAlarmSchedules(dailySchedule).forEach((alarm, alarmIndex) => {
+    if (!alarmsEnabled) return;
+    if (!alarm.enabled) return;
+    summary.nextAlarm = earlierEvent(
+      summary.nextAlarm,
+      buildScheduleEvent(
+        timeZone,
+        'alarm',
+        side,
+        scheduleDay,
+        alarmDayIndex,
+        alarm.time,
+        alarm.alarmTemperature,
+        alarmIndex
+      )
+    );
+  });
 
   Object.entries(dailySchedule.temperatures).forEach(([time, temperatureF]) => {
     const temperatureDayIndex = getDayIndexForSchedule(scheduleDay, time as Time);
@@ -150,11 +160,11 @@ const summarizeSideSchedule = (schedules: Schedules, settings: Settings, side: S
   if (settings[side].awayMode) return summary;
 
   Object.entries(schedules[side]).forEach(([scheduleDay, dailySchedule]) => {
-    summarizeDailySchedule(settings.timeZone, side, scheduleDay as DayOfWeek, dailySchedule, summary);
+    summarizeDailySchedule(settings.timeZone, settings[side].alarmsEnabled, side, scheduleDay as DayOfWeek, dailySchedule, summary);
   });
 
   const alarmOverride = buildAlarmOverrideEvent(settings, side);
-  if (alarmOverride) summary.nextAlarm = alarmOverride;
+  if (settings[side].alarmsEnabled && alarmOverride) summary.nextAlarm = alarmOverride;
 
   return summary;
 };

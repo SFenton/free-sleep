@@ -293,6 +293,7 @@ class MqttService {
       '+/secondsRemaining/set',
       '+/alarmVibration/set',
       '+/awayMode/set',
+      '+/alarmsEnabled/set',
       '+/schedule/+/set',
       'ledBrightness/set',
       'prime/set',
@@ -450,6 +451,9 @@ class MqttService {
     case 'awayMode':
       await updateSettings({ [side]: { awayMode: coerceBoolean(payload) } } as DeepPartial<AppSettings>);
       return;
+    case 'alarmsEnabled':
+      await updateSettings({ [side]: { alarmsEnabled: coerceBoolean(payload) } } as DeepPartial<AppSettings>);
+      return;
     default:
       throw new Error(`Unsupported MQTT side command: ${relativeTopic}`);
     }
@@ -573,7 +577,10 @@ class MqttService {
   private async publishSettings() {
     await settingsDB.read();
     await this.publish('settings/state', settingsDB.data, true);
-    await Promise.all(SideSchema.options.map(side => this.publish(`${side}/awayMode/state`, settingsDB.data[side].awayMode, true)));
+    await Promise.all(SideSchema.options.flatMap(side => [
+      this.publish(`${side}/awayMode/state`, settingsDB.data[side].awayMode, true),
+      this.publish(`${side}/alarmsEnabled/state`, settingsDB.data[side].alarmsEnabled, true),
+    ]));
     return _.cloneDeep(settingsDB.data);
   }
 

@@ -151,12 +151,30 @@ The server exposes RESTful endpoints for interaction. All responses are JSON unl
       },
       "alarm": {
         "time": "08:00",
-        "vibrationIntensity": 1,
+        "vibrationIntensity": 100,
         "vibrationPattern": "rise",
         "duration": 10,
         "enabled": true,
         "alarmTemperature": 78
-      }
+      },
+      "alarms": [
+        {
+          "time": "06:30",
+          "vibrationIntensity": 100,
+          "vibrationPattern": "rise",
+          "duration": 10,
+          "enabled": true,
+          "alarmTemperature": 78
+        },
+        {
+          "time": "07:15",
+          "vibrationIntensity": 100,
+          "vibrationPattern": "rise",
+          "duration": 10,
+          "enabled": true,
+          "alarmTemperature": 78
+        }
+      ]
     }
   }
 }
@@ -197,16 +215,19 @@ The server exposes RESTful endpoints for interaction. All responses are JSON unl
       },
       "alarm": {
         "time": "08:00",
-        "vibrationIntensityStart": 1,
-        "vibrationIntensityEnd": 1,
+        "vibrationIntensity": 100,
+        "vibrationPattern": "rise",
         "duration": 10,
         "enabled": false,
         "alarmTemperature": 78
-      }
+      },
+      "alarms": []
     }
   }
 }
 ```
+
+`alarm` is retained as the legacy primary alarm field. Use `alarms` to store multiple alarms for the same side/day; when `alarms` is provided, Free Sleep schedules every enabled item in the array and mirrors the first item into `alarm` for older clients.
 
 ---
 

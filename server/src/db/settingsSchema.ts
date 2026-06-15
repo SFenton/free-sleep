@@ -29,6 +29,7 @@ export const GestureSchema = z.enum(['doubleTap', 'tripleTap', 'quadTap']);
 const SideSettingsSchema = z.object({
   name: z.string().min(1).max(20),
   awayMode: z.boolean(),
+  alarmsEnabled: z.boolean(),
   scheduleOverrides: z.object({
     temperatureSchedules: z.object({
       disabled: z.boolean(),

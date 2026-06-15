@@ -152,6 +152,13 @@ export function buildHomeAssistantDiscoveryMessages({
     payload_press: 'true',
     icon: 'mdi:alarm-off',
   });
+  add('sensor', `${safeDeviceId}_schedules`, {
+    name: 'Schedules',
+    state_topic: topic(topicPrefix, 'schedules/state'),
+    value_template: '{{ "ok" }}',
+    json_attributes_topic: topic(topicPrefix, 'schedules/state'),
+    icon: 'mdi:calendar-clock',
+  });
 
   for (const side of SideSchema.options) {
     const name = sideName(settings, side);
@@ -214,6 +221,14 @@ export function buildHomeAssistantDiscoveryMessages({
       payload_on: 'true',
       payload_off: 'false',
       icon: 'mdi:bed-empty',
+    });
+    add('switch', `${sideId}_alarms_enabled`, {
+      name: `${name} Alarms Enabled`,
+      state_topic: topic(topicPrefix, `${side}/alarmsEnabled/state`),
+      command_topic: topic(topicPrefix, `${side}/alarmsEnabled/set`),
+      payload_on: 'true',
+      payload_off: 'false',
+      icon: 'mdi:alarm-check',
     });
     add('sensor', `${sideId}_heart_rate`, {
       name: `${name} Heart Rate`,

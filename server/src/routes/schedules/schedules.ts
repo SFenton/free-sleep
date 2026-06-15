@@ -10,6 +10,7 @@ import schedulesDB from '../../db/schedules.js';
 
 
 import {
+  AlarmSchedule,
   DailySchedule,
   DayOfWeek,
   SchedulesSchema,
@@ -18,6 +19,10 @@ import {
 } from '../../db/schedulesSchema.js';
 
 const router = express.Router();
+const primaryAlarm = (alarms: AlarmSchedule[], fallback: AlarmSchedule) => alarms[0] ?? {
+  ...fallback,
+  enabled: false,
+};
 
 export async function updateSchedules(schedulesUpdate: DeepPartial<Schedules>) {
   const validationResult = SchedulesSchema.deepPartial().safeParse(schedulesUpdate);
@@ -35,7 +40,13 @@ export async function updateSchedules(schedulesUpdate: DeepPartial<Schedules>) {
         _.merge(schedulesDB.data[side][day].power, schedule.power);
       }
       if (schedule.temperatures) schedulesDB.data[side][day].temperatures = schedule.temperatures;
-      if (schedule.alarm) schedulesDB.data[side][day].alarm = schedule.alarm;
+      if (schedule.alarms) {
+        schedulesDB.data[side][day].alarms = schedule.alarms as AlarmSchedule[];
+        schedulesDB.data[side][day].alarm = primaryAlarm(schedulesDB.data[side][day].alarms, schedulesDB.data[side][day].alarm);
+      } else if (schedule.alarm) {
+        schedulesDB.data[side][day].alarm = schedule.alarm;
+        schedulesDB.data[side][day].alarms = schedule.alarm.enabled ? [schedule.alarm] : [];
+      }
     });
   });
   await schedulesDB.write();
