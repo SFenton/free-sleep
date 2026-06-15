@@ -8,7 +8,7 @@ export const TemperatureSchema = z.number().int().min(55).max(110);
 export const AlarmSchema = z.object({
     vibrationIntensity: z.number().int().min(1).max(100),
     vibrationPattern: z.enum(['double', 'rise']),
-    duration: z.number().int().positive().min(0).max(180),
+    duration: z.number().int().positive().min(0).max(300),
 }).strict();
 export const AlarmJobSchema = AlarmSchema.extend({
     side: SideSchema,
