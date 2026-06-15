@@ -19,9 +19,11 @@ export const AlarmScheduleSchema = AlarmSchema.extend({
     enabled: z.boolean(),
     alarmTemperature: TemperatureSchema,
 }).strict();
+export const AlarmSchedulesSchema = z.array(AlarmScheduleSchema);
 export const DailyScheduleSchema = z.object({
     temperatures: z.record(TimeSchema, TemperatureSchema),
     alarm: AlarmScheduleSchema,
+    alarms: AlarmSchedulesSchema,
     power: z.object({
         on: TimeSchema,
         off: TimeSchema,

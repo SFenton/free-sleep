@@ -2,6 +2,7 @@
 import _ from 'lodash';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
+import { dailyAlarmSchedules } from './scheduleAlarms.js';
 import config from '../config.js';
 const defaultDailySchedule = {
     temperatures: {},
@@ -18,7 +19,8 @@ const defaultDailySchedule = {
         duration: 10,
         enabled: false,
         alarmTemperature: 82,
-    }
+    },
+    alarms: [],
 };
 const defaultSideSchedule = {
     sunday: defaultDailySchedule,
@@ -38,6 +40,12 @@ const schedulesDB = new Low(file, defaultData);
 await schedulesDB.read();
 // Allows us to add default values to the schedules if users have existing schedulesDB.json data
 schedulesDB.data = _.merge({}, defaultData, schedulesDB.data);
+for (const sideSchedule of Object.values(schedulesDB.data)) {
+    for (const dailySchedule of Object.values(sideSchedule)) {
+        dailySchedule.alarms = dailyAlarmSchedules(dailySchedule);
+        dailySchedule.alarm = dailySchedule.alarms[0] ?? defaultDailySchedule.alarm;
+    }
+}
 await schedulesDB.write();
 export default schedulesDB;
 //# sourceMappingURL=schedules.js.map

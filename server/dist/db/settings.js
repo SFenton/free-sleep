@@ -6,6 +6,7 @@ import config from '../config.js';
 const defaultSideSettings = {
     name: 'Side',
     awayMode: false,
+    alarmsEnabled: true,
     scheduleOverrides: {
         temperatureSchedules: {
             disabled: false,
