@@ -194,6 +194,10 @@ class LatestRawFileHandler(FileSystemEventHandler):
                 break
             except Exception as e:
                 if _is_partial_cbor_error(e):
+                    current_size = os.fstat(self.latest_file_obj.fileno()).st_size
+                    if start_pos >= current_size:
+                        self.reset_partial_decode()
+                        break
                     self.handle_partial_decode(start_pos, e)
                     break
                 logger.error(f"Error decoding CBOR, skipping malformed record: {e}")
