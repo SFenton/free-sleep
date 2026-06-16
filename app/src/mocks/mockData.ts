@@ -1,6 +1,6 @@
 import moment from 'moment-timezone';
 import type { Services } from '@api/services.ts';
-import type { Schedules } from '@api/schedulesSchema.ts';
+import type { DailySchedule, Schedules } from '@api/schedulesSchema.ts';
 import type { Settings } from '@api/settingsSchema.ts';
 import type { DeviceStatus } from '@api/deviceStatusSchema';
 import type { MovementRecord } from '@api/movement.ts';
@@ -118,80 +118,85 @@ const createVitalsRecords = (): VitalsRecord[] => {
   return records;
 };
 
+const createDailySchedule = (schedule: Omit<DailySchedule, 'alarms'>): DailySchedule => ({
+  ...schedule,
+  alarms: [schedule.alarm],
+});
+
 const createSchedules = (): Schedules => ({
   left: {
-    sunday: {
+    sunday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '21:30', off: '07:30', enabled: true, onTemperature: 60 },
       alarm: { time: '07:30', vibrationIntensity: 2, vibrationPattern: 'rise', duration: 10, enabled: true, alarmTemperature: 82 },
-    },
-    monday: {
+    }),
+    monday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '21:30', off: '07:00', enabled: true, onTemperature: 60 },
       alarm: { time: '07:00', vibrationIntensity: 3, vibrationPattern: 'double', duration: 10, enabled: true, alarmTemperature: 83 },
-    },
-    tuesday: {
+    }),
+    tuesday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '21:30', off: '07:00', enabled: true, onTemperature: 60 },
       alarm: { time: '07:00', vibrationIntensity: 2, vibrationPattern: 'rise', duration: 8, enabled: true, alarmTemperature: 82 },
-    },
-    wednesday: {
+    }),
+    wednesday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '21:30', off: '07:00', enabled: true, onTemperature: 60 },
       alarm: { time: '07:00', vibrationIntensity: 1, vibrationPattern: 'rise', duration: 8, enabled: true, alarmTemperature: 82 },
-    },
-    thursday: {
+    }),
+    thursday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '21:30', off: '07:00', enabled: true, onTemperature: 60 },
       alarm: { time: '07:00', vibrationIntensity: 2, vibrationPattern: 'rise', duration: 8, enabled: true, alarmTemperature: 81 },
-    },
-    friday: {
+    }),
+    friday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '22:00', off: '08:00', enabled: true, onTemperature: 60 },
       alarm: { time: '08:00', vibrationIntensity: 3, vibrationPattern: 'rise', duration: 12, enabled: true, alarmTemperature: 84 },
-    },
-    saturday: {
+    }),
+    saturday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '22:30', off: '09:00', enabled: true, onTemperature: 60 },
       alarm: { time: '09:00', vibrationIntensity: 1, vibrationPattern: 'rise', duration: 12, enabled: true, alarmTemperature: 85 },
-    },
+    }),
   },
   right: {
-    sunday: {
+    sunday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '21:00', off: '07:00', enabled: true, onTemperature: 60 },
       alarm: { time: '07:00', vibrationIntensity: 2, vibrationPattern: 'rise', duration: 10, enabled: true, alarmTemperature: 84 },
-    },
-    monday: {
+    }),
+    monday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '21:00', off: '08:30', enabled: true, onTemperature: 60 },
       alarm: { time: '06:30', vibrationIntensity: 3, vibrationPattern: 'double', duration: 10, enabled: true, alarmTemperature: 84 },
-    },
-    tuesday: {
+    }),
+    tuesday: createDailySchedule({
       temperatures: { '06:00': 82, '07:00': 100 },
       power: { on: '21:15', off: '06:30', enabled: true, onTemperature: 60 },
       alarm: { time: '06:30', vibrationIntensity: 3, vibrationPattern: 'double', duration: 8, enabled: true, alarmTemperature: 83 },
-    },
-    wednesday: {
+    }),
+    wednesday: createDailySchedule({
       temperatures: { '05:00': 82, '6:00': 100 },
       power: { on: '21:15', off: '06:30', enabled: true, onTemperature: 60 },
       alarm: { time: '06:30', vibrationIntensity: 2, vibrationPattern: 'double', duration: 8, enabled: true, alarmTemperature: 83 },
-    },
-    thursday: {
+    }),
+    thursday: createDailySchedule({
       temperatures: { '05:00': 82, '6:00': 100 },
       power: { on: '21:15', off: '06:30', enabled: true, onTemperature: 60 },
       alarm: { time: '06:30', vibrationIntensity: 2, vibrationPattern: 'double', duration: 8, enabled: true, alarmTemperature: 83 },
-    },
-    friday: {
+    }),
+    friday: createDailySchedule({
       temperatures: { '05:00': 82, '6:00': 100 },
       power: { on: '22:00', off: '07:30', enabled: true, onTemperature: 60 },
       alarm: { time: '07:30', vibrationIntensity: 3, vibrationPattern: 'rise', duration: 12, enabled: true, alarmTemperature: 85 },
-    },
-    saturday: {
+    }),
+    saturday: createDailySchedule({
       temperatures: { '05:00': 82, '6:00': 100 },
       power: { on: '22:30', off: '08:30', enabled: true, onTemperature: 60 },
       alarm: { time: '08:30', vibrationIntensity: 2, vibrationPattern: 'rise', duration: 12, enabled: true, alarmTemperature: 86 },
-    },
+    }),
   },
 });
 
@@ -203,6 +208,7 @@ const createSettings = (): Settings => ({
   left: {
     name: 'Left side',
     awayMode: false,
+    alarmsEnabled: true,
     scheduleOverrides: {
       temperatureSchedules: { disabled: false, expiresAt: '' },
       alarm: { disabled: false, timeOverride: '', expiresAt: '' },
@@ -229,6 +235,7 @@ const createSettings = (): Settings => ({
   right: {
     name: 'Right side',
     awayMode: false,
+    alarmsEnabled: true,
     scheduleOverrides: {
       temperatureSchedules: { disabled: false, expiresAt: '' },
       alarm: { disabled: false, timeOverride: '', expiresAt: '' },

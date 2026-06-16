@@ -6,6 +6,7 @@ import moment from 'moment-timezone';
 import { Job, JobKeyListSchema } from './jobsSchema.js';
 import update from '../../jobs/update.js';
 import reboot from '../../jobs/reboot.js';
+import enableBiometrics from '../../jobs/enableBiometrics.js';
 
 const router = express.Router();
 
@@ -40,6 +41,7 @@ const JOB_MAP: Record<Job, () => void> = {
   analyzeSleepRight,
   biometricsCalibrationLeft,
   biometricsCalibrationRight,
+  enableBiometrics,
   reboot,
   update,
 };

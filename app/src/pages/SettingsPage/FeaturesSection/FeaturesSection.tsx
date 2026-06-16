@@ -1,7 +1,8 @@
 import InfoIcon from '@mui/icons-material/Info';
-import { Box, CircularProgress, FormControlLabel, Typography, Switch } from '@mui/material';
+import { Box, Button, CircularProgress, FormControlLabel, Typography, Switch } from '@mui/material';
 import Section from '../Section.tsx';
 import { Services, useServices, postServices } from '@api/services.ts';
+import { postJobs } from '@api/jobs.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { DeepPartial } from 'ts-essentials';
 
@@ -14,6 +15,17 @@ export default function FeaturesSection() {
     setIsUpdating(true);
 
     postServices(services)
+      .then(() => refetch())
+      .catch(error => {
+        console.error(error);
+      })
+      .finally(() => setIsUpdating(false));
+  };
+
+  const installBiometrics = () => {
+    setIsUpdating(true);
+
+    postJobs(['enableBiometrics'])
       .then(() => refetch())
       .catch(error => {
         console.error(error);
@@ -48,6 +60,19 @@ export default function FeaturesSection() {
         </Typography>
 
       </Box>
+      {
+        services.biometrics.jobs.installation.status !== 'healthy' && (
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={ isUpdating || services.biometrics.jobs.installation.status === 'started' }
+            onClick={ installBiometrics }
+            sx={ { mt: 1 } }
+          >
+            Install biometrics
+          </Button>
+        )
+      }
       <br />
       <FormControlLabel
         control={

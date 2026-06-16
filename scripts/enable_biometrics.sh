@@ -6,7 +6,22 @@ result=$?
 if [ $result -eq 0 ]; then
   echo "Biometrics environment not setup, continuing with installation..."
 elif [ $result -eq 1 ]; then
-  echo "Biometrics environment setup already, exiting!"
+  echo "Biometrics environment setup already, enabling service..."
+  systemctl enable free-sleep-stream.service
+  systemctl restart free-sleep-stream.service
+  curl -s -X POST http://127.0.0.1:3000/api/services \
+    -H "Content-Type: application/json" \
+    -d '{
+      "biometrics": {
+        "enabled": true,
+        "jobs": {
+          "installation": {
+            "status": "healthy",
+            "message": ""
+          }
+        }
+      }
+    }'
   exit 0
 else
   echo "Unable to check if biometrics installed, exiting..."
@@ -47,6 +62,19 @@ trap '
 
 
 sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
+curl -s -X POST http://127.0.0.1:3000/api/services \
+  -H "Content-Type: application/json" \
+  -d '{
+    "biometrics": {
+      "enabled": true,
+      "jobs": {
+        "installation": {
+          "status": "started",
+          "message": "Installing biometrics"
+        }
+      }
+    }
+  }'
 sh /home/dac/free-sleep/scripts/setup_python.sh
 sh /home/dac/free-sleep/scripts/install_python_packages.sh
 sh /home/dac/free-sleep/scripts/setup_streamer_service.sh
@@ -56,9 +84,11 @@ curl -X POST http://127.0.0.1:3000/api/services \
   -H "Content-Type: application/json" \
   -d '{
     "biometrics": {
+      "enabled": true,
       "jobs": {
         "installation": {
-          "status": "healthy"
+          "status": "healthy",
+          "message": ""
         }
       }
     }
@@ -66,4 +96,3 @@ curl -X POST http://127.0.0.1:3000/api/services \
 
 sh /home/dac/free-sleep/scripts/block_internet_access.sh
 cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python calibrate_sensor_thresholds.py
-
