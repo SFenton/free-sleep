@@ -7,41 +7,108 @@ const router = express.Router();
 
 const PERSISTENT_DIR = '/persistent';
 const RAW_FILE_LIMIT = 20;
+const DIRECTORY_ENTRY_LIMIT = 100;
+const MAX_SCAN_DEPTH = 4;
 
 type RawFileSnapshot = {
   name: string;
   path: string;
+  relativePath: string;
   sizeBytes: number;
   modifiedAt: string;
   ageSeconds: number;
 };
 
+type DirectoryEntrySnapshot = {
+  name: string;
+  path: string;
+  relativePath: string;
+  type: 'directory' | 'file' | 'other';
+  sizeBytes: number;
+  modifiedAt: string;
+  ageSeconds: number;
+};
+
+type ScanResult = {
+  rawFiles: RawFileSnapshot[];
+  scanErrors: { path: string; message: string }[];
+};
+
 let previousRawFiles = new Map<string, RawFileSnapshot>();
 
-async function getRawFileSnapshots(): Promise<RawFileSnapshot[]> {
+function toAgeSeconds(modifiedAt: Date, now: number) {
+  return Math.round((now - modifiedAt.getTime()) / 1000);
+}
+
+async function getDirectoryEntrySnapshots(): Promise<DirectoryEntrySnapshot[]> {
   const now = Date.now();
-  const names = await readdir(PERSISTENT_DIR);
-  const rawNames = names.filter(name => name.endsWith('.RAW') && name !== 'SEQNO.RAW');
-  const snapshots = await Promise.all(rawNames.map(async name => {
-    const filePath = path.join(PERSISTENT_DIR, name);
+  const entries = await readdir(PERSISTENT_DIR, { withFileTypes: true });
+  const snapshots = await Promise.all(entries.map(async entry => {
+    const filePath = path.join(PERSISTENT_DIR, entry.name);
     const fileStat = await stat(filePath);
     return {
-      name,
+      name: entry.name,
       path: filePath,
+      relativePath: entry.name,
+      type: entry.isDirectory() ? 'directory' as const : entry.isFile() ? 'file' as const : 'other' as const,
       sizeBytes: fileStat.size,
       modifiedAt: fileStat.mtime.toISOString(),
-      ageSeconds: Math.round((now - fileStat.mtime.getTime()) / 1000),
+      ageSeconds: toAgeSeconds(fileStat.mtime, now),
     };
   }));
 
   return snapshots.sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt));
 }
 
+async function scanRawFiles(directory: string, depth: number, now: number, scanErrors: ScanResult['scanErrors']): Promise<RawFileSnapshot[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const snapshots = await Promise.all(entries.map(async entry => {
+    const filePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (depth >= MAX_SCAN_DEPTH) return [];
+      try {
+        return await scanRawFiles(filePath, depth + 1, now, scanErrors);
+      } catch (error) {
+        scanErrors.push({
+          path: filePath,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return [];
+      }
+    }
+
+    if (!entry.isFile() || !entry.name.endsWith('.RAW') || entry.name === 'SEQNO.RAW') return [];
+
+    const fileStat = await stat(filePath);
+    return [{
+      name: entry.name,
+      path: filePath,
+      relativePath: path.relative(PERSISTENT_DIR, filePath),
+      sizeBytes: fileStat.size,
+      modifiedAt: fileStat.mtime.toISOString(),
+      ageSeconds: toAgeSeconds(fileStat.mtime, now),
+    }];
+  }));
+
+  return snapshots.flat();
+}
+
+async function getRawFileSnapshots(): Promise<ScanResult> {
+  const scanErrors: ScanResult['scanErrors'] = [];
+  const rawFiles = await scanRawFiles(PERSISTENT_DIR, 0, Date.now(), scanErrors);
+
+  return {
+    rawFiles: rawFiles.sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)),
+    scanErrors,
+  };
+}
+
 router.get('/diagnostics/biometrics', async (_req: Request, res: Response) => {
   try {
-    const rawFiles = await getRawFileSnapshots();
+    const rootEntries = await getDirectoryEntrySnapshots();
+    const { rawFiles, scanErrors } = await getRawFileSnapshots();
     const latestRawFile = rawFiles[0] ?? null;
-    const previousLatestRawFile = latestRawFile ? previousRawFiles.get(latestRawFile.name) ?? null : null;
+    const previousLatestRawFile = latestRawFile ? previousRawFiles.get(latestRawFile.path) ?? null : null;
     const latestRawFileDelta = latestRawFile && previousLatestRawFile
       ? {
         sizeBytes: latestRawFile.sizeBytes - previousLatestRawFile.sizeBytes,
@@ -49,15 +116,17 @@ router.get('/diagnostics/biometrics', async (_req: Request, res: Response) => {
       }
       : null;
 
-    previousRawFiles = new Map(rawFiles.map(file => [file.name, file]));
+    previousRawFiles = new Map(rawFiles.map(file => [file.path, file]));
 
     res.json({
       timestamp: new Date().toISOString(),
       persistentDir: PERSISTENT_DIR,
       rawFileCount: rawFiles.length,
+      rootEntries: rootEntries.slice(0, DIRECTORY_ENTRY_LIMIT),
       latestRawFile,
       previousLatestRawFile,
       latestRawFileDelta,
+      scanErrors,
       rawFiles: rawFiles.slice(0, RAW_FILE_LIMIT),
     });
   } catch (error) {
