@@ -46,6 +46,14 @@ from service_health import update_health
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
 
+STREAM_HEALTH_INTERVAL_SECONDS = 60
+PARTIAL_CBOR_STALE_SECONDS = 30
+PARTIAL_CBOR_LOG_INTERVAL_SECONDS = 60
+
+
+def _is_partial_cbor_error(error: Exception) -> bool:
+    return 'premature end of stream' in str(error).lower()
+
 
 def _safe_getmtime(path: str) -> float:
     try:
@@ -65,7 +73,48 @@ class LatestRawFileHandler(FileSystemEventHandler):
         self.latest_file = None
         self.latest_file_obj = None
         self.last_pos = 0  # Track last read position
+        self.partial_decode_pos = None
+        self.partial_decode_size = None
+        self.partial_decode_started_at = None
+        self.partial_decode_logged_at = 0
         self.track_latest_file()
+
+    def reset_partial_decode(self):
+        self.partial_decode_pos = None
+        self.partial_decode_size = None
+        self.partial_decode_started_at = None
+        self.partial_decode_logged_at = 0
+
+    def handle_partial_decode(self, start_pos: int, error: Exception):
+        current_size = os.fstat(self.latest_file_obj.fileno()).st_size
+        now = time.monotonic()
+        state_changed = (
+            self.partial_decode_pos != start_pos
+            or self.partial_decode_size != current_size
+        )
+        if state_changed:
+            self.partial_decode_pos = start_pos
+            self.partial_decode_size = current_size
+            self.partial_decode_started_at = now
+            self.partial_decode_logged_at = 0
+
+        if now - self.partial_decode_started_at >= PARTIAL_CBOR_STALE_SECONDS:
+            logger.warning(
+                f'Skipping stale partial CBOR record in {self.latest_file} at byte '
+                f'{start_pos}; file remained at {current_size} bytes for '
+                f'{PARTIAL_CBOR_STALE_SECONDS} seconds. Last error: {error}'
+            )
+            self.last_pos = current_size
+            self.latest_file_obj.seek(self.last_pos)
+            self.reset_partial_decode()
+            return
+
+        if now - self.partial_decode_logged_at >= PARTIAL_CBOR_LOG_INTERVAL_SECONDS:
+            logger.debug(
+                f'Waiting for complete CBOR record in {self.latest_file} at byte '
+                f'{start_pos}; current file size is {current_size}. Last error: {error}'
+            )
+            self.partial_decode_logged_at = now
 
     def track_latest_file(self):
         """Finds the most recent RAW file in the directory and starts tracking it."""
@@ -93,6 +142,7 @@ class LatestRawFileHandler(FileSystemEventHandler):
             # Open the new file for reading in binary mode
             self.latest_file_obj = open(self.latest_file, "rb")
             self.last_pos = 0  # Reset position for new file
+            self.reset_partial_decode()
 
     def on_created(self, event):
         """Triggered when a new .RAW file is created."""
@@ -109,32 +159,45 @@ class LatestRawFileHandler(FileSystemEventHandler):
         self.latest_file_obj.seek(self.last_pos)
 
         while True:
+            start_pos = self.last_pos
             try:
                 # Decode CBOR object from a **single line**
                 row = cbor2.load(self.latest_file_obj)  # Load the next CBOR object
+                self.last_pos = self.latest_file_obj.tell()
+                self.reset_partial_decode()
                 one_minute_ago = datetime.now() - timedelta(minutes=2)
 
-                if 'data' in row:  # Check if 'data' key exists
-                    # Skip records with empty data (malformed records)
-                    if not row.get('data'):
-                        continue
+                # Skip records with empty data (malformed records)
+                if not isinstance(row, dict) or not row.get('data'):
+                    continue
+                try:
                     decoded_data = cbor2.loads(row['data'])
-                    if decoded_data['type'] != 'piezo-dual':
-                        continue
-                    record_time = datetime.fromtimestamp(decoded_data['ts'])
-                    if one_minute_ago > record_time:
-                        continue
-                    load_piezo_row(decoded_data, 'right')
-                    piezo_record_queue.put(decoded_data)
-
-                # Update last read position
-                self.last_pos = self.latest_file_obj.tell()
+                except Exception as error:
+                    logger.warning(f'Error decoding nested CBOR data, skipping record: {error}')
+                    continue
+                if not isinstance(decoded_data, dict):
+                    logger.warning(f'Skipping unexpected nested CBOR value: {type(decoded_data)}')
+                    continue
+                if decoded_data.get('type') != 'piezo-dual':
+                    continue
+                if 'ts' not in decoded_data:
+                    logger.warning(f'Skipping piezo-dual record without timestamp: {decoded_data.keys()}')
+                    continue
+                record_time = datetime.fromtimestamp(decoded_data['ts'])
+                if one_minute_ago > record_time:
+                    continue
+                load_piezo_row(decoded_data, 'right')
+                piezo_record_queue.put(decoded_data)
 
             except EOFError:
                 # No more CBOR objects to read
                 break
             except Exception as e:
-                logger.error(f"Error decoding CBOR: {e}")
+                if _is_partial_cbor_error(e):
+                    self.handle_partial_decode(start_pos, e)
+                    break
+                logger.error(f"Error decoding CBOR, skipping malformed record: {e}")
+                self.last_pos = self.latest_file_obj.tell()
                 break
 
 
@@ -172,6 +235,7 @@ def watch_directory(directory="/persistent"):
     observer = Observer()
     observer.schedule(handler, directory, recursive=False)
     observer.start()
+    last_health_update = time.monotonic()
 
     # Start biometric processing in a separate thread
     processing_thread = threading.Thread(target=process_biometrics, daemon=True)
@@ -181,6 +245,9 @@ def watch_directory(directory="/persistent"):
     try:
         while True:
             time.sleep(1)
+            if time.monotonic() - last_health_update >= STREAM_HEALTH_INTERVAL_SECONDS:
+                update_health('stream', 'healthy', '')
+                last_health_update = time.monotonic()
             handler.track_latest_file()  # Check if a newer file exists
             handler.follow_latest_file()  # Read new CBOR entries line-by-line
     except KeyboardInterrupt:
