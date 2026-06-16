@@ -1,4 +1,5 @@
 import { SideSchema } from '../db/schedulesSchema.js';
+import { SCHEDULE_BEDTIME_COMMAND, SCHEDULE_BEDTIME_LABEL } from './scheduleBedtimes.js';
 import { SCHEDULE_SUMMARY_KEYS, SCHEDULE_SUMMARY_LABELS } from './scheduleSummary.js';
 import { SCHEDULE_TEMPERATURE_STAGE_KEYS, SCHEDULE_TEMPERATURE_STAGE_LABELS } from './scheduleStageTemperatures.js';
 const sanitize = (value) => value.replace(/[^A-Za-z0-9_]+/g, '').replace(/^_+|_+$/g, '');
@@ -144,6 +145,14 @@ export function buildHomeAssistantDiscoveryMessages({ deviceId, topicPrefix, dis
                 ...temperatureLevelNumberPayload(`${name} ${SCHEDULE_TEMPERATURE_STAGE_LABELS[stage]}`, topic(topicPrefix, `${side}/schedule/${stage}TemperatureF/state`), topic(topicPrefix, `${side}/schedule/${stage}TemperatureF/set`)),
             });
         }
+        add('text', `${sideId}_${SCHEDULE_BEDTIME_COMMAND}`, {
+            name: `${name} ${SCHEDULE_BEDTIME_LABEL}`,
+            state_topic: topic(topicPrefix, `${side}/schedule/${SCHEDULE_BEDTIME_COMMAND}/state`),
+            command_topic: topic(topicPrefix, `${side}/schedule/${SCHEDULE_BEDTIME_COMMAND}/set`),
+            pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
+            mode: 'text',
+            icon: 'mdi:bed-clock',
+        });
         add('sensor', `${sideId}_current_temperature`, {
             name: `${name} Current Temperature`,
             state_topic: topic(topicPrefix, `${side}/currentTemperatureF/state`),

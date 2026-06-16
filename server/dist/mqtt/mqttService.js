@@ -9,7 +9,7 @@ import settingsDB from '../db/settings.js';
 import schedulesDB from '../db/schedules.js';
 import servicesDB from '../db/services.js';
 import mqttSettingsDB from '../db/mqttSettings.js';
-import { SideSchema } from '../db/schedulesSchema.js';
+import { SideSchema, TimeSchema } from '../db/schedulesSchema.js';
 import { DeviceStatusSchema } from '../routes/deviceStatus/deviceStatusSchema.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { updateSettings } from '../routes/settings/settings.js';
@@ -24,6 +24,7 @@ import { onMetricsUpdated, onPresenceUpdated, onWifiStrengthUpdated } from '../e
 import { loadLatestMovementBySide, loadLatestSleepBySide, loadLatestVitalsBySide, loadMovementData, loadSleepData, loadVitalsData, loadVitalsSummaryData, } from '../routes/metrics/metricQueries.js';
 import { buildHomeAssistantDiscoveryMessages } from './homeAssistantDiscovery.js';
 import { wait } from '../8sleep/promises.js';
+import { buildPrimeTimeSettingsUpdate, buildScheduleBedtimeStates, buildScheduleBedtimeUpdate, SCHEDULE_BEDTIME_COMMAND, } from './scheduleBedtimes.js';
 import { buildScheduleSummary, scheduleEventAttributes, scheduleEventState, SCHEDULE_SUMMARY_KEYS } from './scheduleSummary.js';
 import { buildScheduleTemperatureStageStates, buildScheduleTemperatureStageUpdate, SCHEDULE_TEMPERATURE_STAGE_COMMANDS, SCHEDULE_TEMPERATURE_STAGE_KEYS, } from './scheduleStageTemperatures.js';
 const isJsonObject = (value) => {
@@ -369,6 +370,12 @@ class MqttService {
         await schedulesDB.read();
         await updateSchedules(buildScheduleTemperatureStageUpdate(schedulesDB.data, side, stage, temperatureF));
     }
+    async setScheduleBedtime(side, payload) {
+        const bedtime = TimeSchema.parse(String(payload).trim());
+        await schedulesDB.read();
+        const updatedSchedules = await updateSchedules(buildScheduleBedtimeUpdate(side, bedtime));
+        await updateSettings(buildPrimeTimeSettingsUpdate(updatedSchedules));
+    }
     async executeSideCommand(relativeTopic, payload) {
         const parts = relativeTopic.split('/');
         const [side, command, action] = parts;
@@ -376,6 +383,10 @@ class MqttService {
             throw new Error(`Unsupported MQTT topic: ${relativeTopic}`);
         }
         if (parts.length === 4 && command === 'schedule' && parts[3] === 'set') {
+            if (parts[2] === SCHEDULE_BEDTIME_COMMAND) {
+                await this.setScheduleBedtime(side, payload);
+                return;
+            }
             const stage = SCHEDULE_TEMPERATURE_STAGE_COMMANDS[parts[2]];
             if (!stage)
                 throw new Error(`Unsupported MQTT schedule command: ${relativeTopic}`);
@@ -533,6 +544,7 @@ class MqttService {
         await schedulesDB.read();
         await settingsDB.read();
         const scheduleSummary = buildScheduleSummary(schedulesDB.data, settingsDB.data);
+        const scheduleBedtimes = buildScheduleBedtimeStates(schedulesDB.data);
         const scheduleTemperatureStages = buildScheduleTemperatureStageStates(schedulesDB.data);
         await this.publish('schedules/state', schedulesDB.data, true);
         await this.publish('schedules/summary/state', scheduleSummary, true);
@@ -544,6 +556,7 @@ class MqttService {
                     this.publish(`${side}/schedule/${summaryKey}/attributes`, scheduleEventAttributes(event), true),
                 ];
             }),
+            this.publish(`${side}/schedule/${SCHEDULE_BEDTIME_COMMAND}/state`, scheduleBedtimes[side], true),
             ...SCHEDULE_TEMPERATURE_STAGE_KEYS.map(stage => this.publish(`${side}/schedule/${stage}TemperatureF/state`, scheduleTemperatureStages[side][stage], true)),
         ]));
     }
