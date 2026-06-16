@@ -24,6 +24,7 @@ run_shell() {
 check_nats_socket() {
   echo ""
   echo "NATS socket check:"
+  run_shell "getent ahosts localhost || true"
   python3 - <<'PY' || true
 import socket
 
@@ -59,6 +60,65 @@ for host, port, family in targets:
 PY
 }
 
+prefer_ipv4_localhost() {
+  echo ""
+  echo "Ensuring localhost resolves to IPv4 for local NATS clients..."
+  if [ ! -f /etc/hosts ]; then
+    echo "/etc/hosts missing; skipping localhost normalization."
+    return
+  fi
+
+  echo "Current /etc/hosts localhost entries:"
+  grep -En '(^|[[:space:]])localhost([[:space:]]|$)|^[[:space:]]*::1' /etc/hosts || true
+
+  cp -n /etc/hosts /etc/hosts.free-sleep-biometrics.bak 2>/dev/null || true
+  local tmp_file
+  tmp_file="$(mktemp)"
+  awk '
+    BEGIN { has_ipv4_localhost = 0 }
+    $1 == "127.0.0.1" {
+      has_localhost = 0
+      for (i = 2; i <= NF; i++) {
+        if ($i == "localhost") {
+          has_localhost = 1
+        }
+      }
+      if (!has_localhost) {
+        print $0 " localhost"
+      } else {
+        print
+      }
+      has_ipv4_localhost = 1
+      next
+    }
+    $1 == "::1" {
+      line = "::1"
+      kept = 0
+      for (i = 2; i <= NF; i++) {
+        if ($i != "localhost" && $i != "localhost.localdomain") {
+          line = line " " $i
+          kept = 1
+        }
+      }
+      if (!kept) {
+        line = "::1 ip6-localhost ip6-loopback"
+      }
+      print line
+      next
+    }
+    { print }
+    END {
+      if (!has_ipv4_localhost) {
+        print "127.0.0.1 localhost"
+      }
+    }
+  ' /etc/hosts > "$tmp_file" && cat "$tmp_file" > /etc/hosts
+  rm -f "$tmp_file"
+
+  echo "Updated /etc/hosts localhost entries:"
+  grep -En '(^|[[:space:]])localhost([[:space:]]|$)|^[[:space:]]*::1' /etc/hosts || true
+}
+
 unit_exists() {
   local unit="$1"
   systemctl status "$unit" >/dev/null 2>&1 || systemctl list-unit-files "$unit" --no-pager --no-legend 2>/dev/null | grep -q "$unit"
@@ -74,9 +134,11 @@ restart_if_exists() {
   fi
 }
 
+prefer_ipv4_localhost
+
 echo "Matching units before repair:"
-systemctl list-units --all --type=service --no-pager | grep -Ei 'nats|jetstream|capybara|free-sleep-stream' || true
-run_shell "ps -ef | grep -Ei '[n]ats|[c]apybara|[j]etstream|free-sleep-stream' || true"
+systemctl list-units --all --type=service --no-pager | grep -Ei 'nats|jetstream|capybara|frank|free-sleep-stream' || true
+run_shell "ps -ef | grep -Ei '[n]ats|[c]apybara|[j]etstream|[f]rank|free-sleep-stream' || true"
 run_shell "ss -ltnp 2>/dev/null | grep -E '(:4222|:8222)' || true"
 check_nats_socket
 
@@ -84,20 +146,26 @@ restart_if_exists "nats.service"
 restart_if_exists "nats-server.service"
 sleep 2
 check_nats_socket
+restart_if_exists "frank.service"
 restart_if_exists "jetstream.service"
 restart_if_exists "jetstream-uploader.service"
 restart_if_exists "capybara.service"
 restart_if_exists "free-sleep-stream.service"
 
 echo "Matching units after repair:"
-systemctl list-units --all --type=service --no-pager | grep -Ei 'nats|jetstream|capybara|free-sleep-stream' || true
-run_shell "ps -ef | grep -Ei '[n]ats|[c]apybara|[j]etstream|free-sleep-stream' || true"
+systemctl list-units --all --type=service --no-pager | grep -Ei 'nats|jetstream|capybara|frank|free-sleep-stream' || true
+run_shell "ps -ef | grep -Ei '[n]ats|[c]apybara|[j]etstream|[f]rank|free-sleep-stream' || true"
 run_shell "ss -ltnp 2>/dev/null | grep -E '(:4222|:8222)' || true"
 check_nats_socket
 run_cmd systemctl status nats-server.service --no-pager -l
 run_cmd systemctl cat nats-server.service --no-pager
+run_cmd systemctl status capybara.service --no-pager -l
+run_cmd systemctl cat capybara.service --no-pager
+run_cmd systemctl status frank.service --no-pager -l
+run_cmd systemctl cat frank.service --no-pager
 run_cmd journalctl -u nats-server.service -n 120 --no-pager --output=cat
 run_cmd journalctl -u capybara.service -n 80 --no-pager --output=cat
+run_cmd journalctl -u frank.service -n 80 --no-pager --output=cat
 run_cmd journalctl -u jetstream-uploader.service -n 80 --no-pager --output=cat
 run_shell "ls -lah /persistent | grep -E '(RAW|cbor|jetstream)' || true"
 echo "Repair complete."
