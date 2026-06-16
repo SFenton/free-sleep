@@ -6,6 +6,7 @@ export const JobSchema = z.enum([
   'biometricsCalibrationLeft',
   'biometricsCalibrationRight',
   'enableBiometrics',
+  'repairBiometricsSources',
   'reboot',
   'update',
 ]);

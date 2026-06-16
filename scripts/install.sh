@@ -317,6 +317,16 @@ else
   echo "Passwordless permission for biometrics granted to '$USERNAME'."
 fi
 
+# Biometrics source repair
+SUDOERS_BIOMETRICS_REPAIR_RULE="$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/repair_biometrics_sources.sh"
+if sudo grep -Fxq "$SUDOERS_BIOMETRICS_REPAIR_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+  echo "Rule for '$USERNAME' biometrics source repair permissions already exists."
+else
+  echo "$SUDOERS_BIOMETRICS_REPAIR_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
+  sudo chmod 440 "$SUDOERS_FILE"
+  echo "Passwordless permission for biometrics source repair granted to '$USERNAME'."
+fi
+
 echo ""
 
 sh /home/dac/free-sleep/scripts/add_shortcuts.sh

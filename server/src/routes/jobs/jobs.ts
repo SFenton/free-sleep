@@ -7,6 +7,7 @@ import { Job, JobKeyListSchema } from './jobsSchema.js';
 import update from '../../jobs/update.js';
 import reboot from '../../jobs/reboot.js';
 import enableBiometrics from '../../jobs/enableBiometrics.js';
+import repairBiometricsSources from '../../jobs/repairBiometricsSources.js';
 
 const router = express.Router();
 
@@ -42,6 +43,7 @@ const JOB_MAP: Record<Job, () => void> = {
   biometricsCalibrationLeft,
   biometricsCalibrationRight,
   enableBiometrics,
+  repairBiometricsSources,
   reboot,
   update,
 };
