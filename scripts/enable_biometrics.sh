@@ -3,10 +3,28 @@
 python3 /home/dac/free-sleep/scripts/is_biometrics_installed.py
 result=$?
 
+ensure_nats_python_package() {
+  if [ ! -x /home/dac/venv/bin/python ]; then
+    echo "Python venv not found; full biometrics installation will create it."
+    return 0
+  fi
+
+  if /home/dac/venv/bin/python -c 'import nats' >/dev/null 2>&1; then
+    echo "nats-py already installed."
+    return 0
+  fi
+
+  echo "Installing nats-py for live biometrics stream..."
+  sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
+  /home/dac/venv/bin/python -m pip install nats-py
+  sh /home/dac/free-sleep/scripts/block_internet_access.sh
+}
+
 if [ $result -eq 0 ]; then
   echo "Biometrics environment not setup, continuing with installation..."
 elif [ $result -eq 1 ]; then
   echo "Biometrics environment setup already, enabling service..."
+  ensure_nats_python_package
   systemctl enable free-sleep-stream.service
   systemctl restart free-sleep-stream.service
   curl -s -X POST http://127.0.0.1:3000/api/services \

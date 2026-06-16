@@ -20,7 +20,10 @@ This is set up to run as a systemctl service, but you can manually run it with:
 import sys
 import platform
 import cbor2
+import asyncio
+import inspect
 from datetime import datetime, timedelta
+from collections import deque
 
 if platform.system().lower() == 'linux':
     sys.path.append('/home/dac/free-sleep/biometrics/')
@@ -49,7 +52,14 @@ piezo_record_queue = queue.Queue()
 STREAM_HEALTH_INTERVAL_SECONDS = 60
 PARTIAL_CBOR_STALE_SECONDS = 30
 PARTIAL_CBOR_LOG_INTERVAL_SECONDS = 60
-STREAM_FILE_SUFFIXES = ('.RAW', '.cbor')
+RECENT_RECORD_WINDOW = timedelta(minutes=2)
+STREAM_FILE_SUFFIXES = ('.RAW',)
+NATS_URL = 'nats://127.0.0.1:4222'
+NATS_STREAM = 'raw'
+NATS_DURABLE = 'free_sleep_stream_live'
+PROCESSED_SEQUENCE_LIMIT = 5000
+processed_sequences = set()
+processed_sequence_order = deque(maxlen=PROCESSED_SEQUENCE_LIMIT)
 
 
 def _is_partial_cbor_error(error: Exception) -> bool:
@@ -68,6 +78,50 @@ def _safe_getmtime(path: str) -> float:
 
 def _is_stream_file_name(file_name: str) -> bool:
     return file_name != 'SEQNO.RAW' and file_name.endswith(STREAM_FILE_SUFFIXES)
+
+
+def _mark_sequence_processed(sequence):
+    if sequence is None:
+        return
+    if len(processed_sequence_order) == processed_sequence_order.maxlen:
+        oldest = processed_sequence_order.popleft()
+        processed_sequences.discard(oldest)
+    processed_sequence_order.append(sequence)
+    processed_sequences.add(sequence)
+
+
+def _decode_raw_row(row):
+    if not isinstance(row, dict):
+        return None
+
+    if row.get('data'):
+        return cbor2.loads(row['data'])
+
+    return row
+
+
+def _queue_decoded_piezo_record(decoded_data) -> bool:
+    if not isinstance(decoded_data, dict):
+        logger.warning(f'Skipping unexpected nested CBOR value: {type(decoded_data)}')
+        return False
+    if decoded_data.get('type') != 'piezo-dual':
+        return False
+    if 'ts' not in decoded_data:
+        logger.warning(f'Skipping piezo-dual record without timestamp: {decoded_data.keys()}')
+        return False
+
+    record_time = datetime.fromtimestamp(decoded_data['ts'])
+    if datetime.now() - record_time > RECENT_RECORD_WINDOW:
+        return False
+
+    sequence = decoded_data.get('seq')
+    if sequence in processed_sequences:
+        return False
+
+    load_piezo_row(decoded_data, 'right')
+    piezo_record_queue.put(decoded_data)
+    _mark_sequence_processed(sequence)
+    return True
 
 
 class LatestRawFileHandler(FileSystemEventHandler):
@@ -170,33 +224,12 @@ class LatestRawFileHandler(FileSystemEventHandler):
                 row = cbor2.load(self.latest_file_obj)  # Load the next CBOR object
                 self.last_pos = self.latest_file_obj.tell()
                 self.reset_partial_decode()
-                one_minute_ago = datetime.now() - timedelta(minutes=2)
-
-                if not isinstance(row, dict):
+                try:
+                    decoded_data = _decode_raw_row(row)
+                except Exception as error:
+                    logger.warning(f'Error decoding nested CBOR data, skipping record: {error}')
                     continue
-
-                if row.get('data'):
-                    try:
-                        decoded_data = cbor2.loads(row['data'])
-                    except Exception as error:
-                        logger.warning(f'Error decoding nested CBOR data, skipping record: {error}')
-                        continue
-                else:
-                    decoded_data = row
-
-                if not isinstance(decoded_data, dict):
-                    logger.warning(f'Skipping unexpected nested CBOR value: {type(decoded_data)}')
-                    continue
-                if decoded_data.get('type') != 'piezo-dual':
-                    continue
-                if 'ts' not in decoded_data:
-                    logger.warning(f'Skipping piezo-dual record without timestamp: {decoded_data.keys()}')
-                    continue
-                record_time = datetime.fromtimestamp(decoded_data['ts'])
-                if one_minute_ago > record_time:
-                    continue
-                load_piezo_row(decoded_data, 'right')
-                piezo_record_queue.put(decoded_data)
+                _queue_decoded_piezo_record(decoded_data)
 
             except EOFError:
                 # No more CBOR objects to read
@@ -274,5 +307,85 @@ def watch_directory(directory="/persistent"):
 
     observer.join()
 
-# Start watching and processing the latest .RAW file
-watch_directory("/persistent")
+
+async def _ack_message(message):
+    ack_result = message.ack()
+    if inspect.isawaitable(ack_result):
+        await ack_result
+
+
+async def watch_nats_stream():
+    try:
+        import nats
+        from nats.errors import TimeoutError as NatsTimeoutError
+        from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
+    except ImportError as error:
+        raise RuntimeError('nats-py is not installed') from error
+
+    logger.info('NATS stream processor starting...')
+    update_health('stream', 'started', '')
+
+    processing_thread = threading.Thread(target=process_biometrics, daemon=True)
+    processing_thread.start()
+
+    nc = None
+    try:
+        nc = await nats.connect(NATS_URL, connect_timeout=5)
+        js = nc.jetstream()
+        stream_info = await js.stream_info(NATS_STREAM)
+        subjects = getattr(stream_info.config, 'subjects', None) or [NATS_STREAM]
+        subject = subjects[0]
+        logger.info(f'Consuming NATS JetStream stream={NATS_STREAM} subject={subject}')
+
+        consumer_config = ConsumerConfig(
+            durable_name=NATS_DURABLE,
+            deliver_policy=DeliverPolicy.NEW,
+            ack_policy=AckPolicy.EXPLICIT,
+        )
+        subscription = await js.pull_subscribe(
+            subject,
+            durable=NATS_DURABLE,
+            stream=NATS_STREAM,
+            config=consumer_config,
+        )
+        last_health_update = time.monotonic()
+        queued_count = 0
+
+        while True:
+            if time.monotonic() - last_health_update >= STREAM_HEALTH_INTERVAL_SECONDS:
+                update_health('stream', 'healthy', '')
+                last_health_update = time.monotonic()
+                logger.debug(f'NATS stream heartbeat; queued piezo records={queued_count}')
+
+            try:
+                messages = await subscription.fetch(25, timeout=5)
+            except NatsTimeoutError:
+                continue
+
+            for message in messages:
+                try:
+                    row = cbor2.loads(message.data)
+                    decoded_data = _decode_raw_row(row)
+                    if _queue_decoded_piezo_record(decoded_data):
+                        queued_count += 1
+                    await _ack_message(message)
+                except Exception as error:
+                    logger.warning(f'Error decoding NATS raw message, acknowledging and skipping: {error}')
+                    await _ack_message(message)
+    finally:
+        if nc is not None:
+            await nc.close()
+        piezo_record_queue.put(None)
+        processing_thread.join(timeout=5)
+
+
+def watch_stream():
+    try:
+        asyncio.run(watch_nats_stream())
+    except Exception as error:
+        logger.warning(f'NATS stream unavailable, falling back to RAW file watcher: {error}')
+        watch_directory("/persistent")
+
+
+# Start watching and processing live biometrics data.
+watch_stream()
