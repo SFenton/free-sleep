@@ -34,6 +34,47 @@ const normalizeTopic = (value) => value.replace(/^\/+|\/+$/g, '');
 const mqttClientId = (settings) => `free-sleep-${settings.deviceId}`;
 const LOWDB_STATE_FILES = new Set(['settingsDB.json', 'schedulesDB.json', 'servicesDB.json']);
 const LOWDB_STATE_PUBLISH_DEBOUNCE_MS = 250;
+const MQTT_PUBLISH_TIMEOUT_MS = 5_000;
+const MQTT_PUBLISHER_TIMEOUT_MS = 20_000;
+class MqttPublishTimeoutError extends Error {
+    constructor(topicPath) {
+        super(`Timed out publishing MQTT topic after ${MQTT_PUBLISH_TIMEOUT_MS}ms: ${topicPath}`);
+        this.name = 'MqttPublishTimeoutError';
+    }
+}
+class MqttPublisherTimeoutError extends Error {
+    constructor(name) {
+        super(`Timed out publishing MQTT ${name} after ${MQTT_PUBLISHER_TIMEOUT_MS}ms`);
+        this.name = 'MqttPublisherTimeoutError';
+    }
+}
+const promiseWithTimeout = (promise, timeoutMs, onTimeout) => {
+    let timeout;
+    let settled = false;
+    return new Promise((resolve, reject) => {
+        timeout = setTimeout(() => {
+            settled = true;
+            reject(onTimeout());
+        }, timeoutMs);
+        promise
+            .then(value => {
+            if (settled)
+                return;
+            settled = true;
+            if (timeout)
+                clearTimeout(timeout);
+            resolve(value);
+        })
+            .catch(error => {
+            if (settled)
+                return;
+            settled = true;
+            if (timeout)
+                clearTimeout(timeout);
+            reject(error);
+        });
+    });
+};
 export const normalizeMqttSettings = (settings) => {
     const deviceId = normalizeMqttDeviceId(settings.deviceId);
     if (settings.enabled && !deviceId)
@@ -109,6 +150,8 @@ class MqttService {
     unsubscribeWifiStrengthUpdated;
     isPublishing = false;
     publishAllStatesRequested = false;
+    reconnectAfterPublishFailureTimeout;
+    isReconnectingAfterPublishFailure = false;
     settings;
     async start() {
         this.startLowDbWatcher();
@@ -214,10 +257,19 @@ class MqttService {
         if (this.publishInterval)
             clearInterval(this.publishInterval);
         this.publishInterval = undefined;
+        if (this.reconnectAfterPublishFailureTimeout)
+            clearTimeout(this.reconnectAfterPublishFailureTimeout);
+        this.reconnectAfterPublishFailureTimeout = undefined;
         if (!this.client)
             return;
         if (this.client.connected) {
-            await this.publish('status', 'offline', true);
+            try {
+                await this.publish('status', 'offline', true, false);
+            }
+            catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                logger.warn(`Unable to publish MQTT offline status before stop: ${message}`);
+            }
         }
         await new Promise((resolve) => this.client?.end(false, {}, () => resolve()));
         this.client = undefined;
@@ -500,7 +552,7 @@ class MqttService {
     }
     async runPublisher(name, publisher) {
         try {
-            return await publisher();
+            return await promiseWithTimeout(publisher(), MQTT_PUBLISHER_TIMEOUT_MS, () => new MqttPublisherTimeoutError(name));
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -604,22 +656,68 @@ class MqttService {
         });
         await Promise.all(messages.map(message => this.publishRaw(message.topic, message.payload, true)));
     }
-    async publish(topicPath, payload, retain) {
-        await this.publishRaw(this.fullTopic(topicPath), payload, retain);
+    async publish(topicPath, payload, retain, reconnectOnTimeout = true) {
+        await this.publishRaw(this.fullTopic(topicPath), payload, retain, reconnectOnTimeout);
     }
-    async publishRaw(topicPath, payload, retain) {
+    async publishRaw(topicPath, payload, retain, reconnectOnTimeout = true) {
         const client = this.client;
         if (!client?.connected)
             return;
         const serializedPayload = this.serializePayload(payload);
         await new Promise((resolve, reject) => {
+            let settled = false;
+            const timeout = setTimeout(() => {
+                settled = true;
+                const error = new MqttPublishTimeoutError(topicPath);
+                if (reconnectOnTimeout)
+                    this.scheduleReconnectAfterPublishFailure(error.message);
+                reject(error);
+            }, MQTT_PUBLISH_TIMEOUT_MS);
             client.publish(topicPath, serializedPayload, { qos: 0, retain }, (error) => {
+                if (settled)
+                    return;
+                settled = true;
+                clearTimeout(timeout);
                 if (error)
                     reject(error);
                 else
                     resolve();
             });
         });
+    }
+    scheduleReconnectAfterPublishFailure(message) {
+        serverStatus.status.mqtt.status = 'retrying';
+        serverStatus.status.mqtt.message = message;
+        if (this.reconnectAfterPublishFailureTimeout || this.isReconnectingAfterPublishFailure)
+            return;
+        this.reconnectAfterPublishFailureTimeout = setTimeout(() => {
+            this.reconnectAfterPublishFailureTimeout = undefined;
+            void this.reconnectAfterPublishFailure(message);
+        }, 0);
+    }
+    async reconnectAfterPublishFailure(message) {
+        const mqttSettings = this.settings;
+        if (!mqttSettings?.enabled || this.isReconnectingAfterPublishFailure)
+            return;
+        this.isReconnectingAfterPublishFailure = true;
+        try {
+            logger.warn(`Reconnecting MQTT after publish failure: ${message}`);
+            const client = this.client;
+            this.client = undefined;
+            if (client) {
+                await new Promise(resolve => client.end(true, {}, () => resolve()));
+            }
+            await this.configure(mqttSettings);
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            serverStatus.status.mqtt.status = 'failed';
+            serverStatus.status.mqtt.message = errorMessage;
+            logger.error(`MQTT reconnect after publish failure failed: ${errorMessage}`);
+        }
+        finally {
+            this.isReconnectingAfterPublishFailure = false;
+        }
     }
     serializePayload(payload) {
         if (payload === null || payload === undefined)
