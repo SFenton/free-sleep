@@ -16,6 +16,11 @@ import {
   loadInputSignalMonitorData,
   selectInputSignalEvents,
 } from '../../8sleep/inputSignalMonitor.js';
+import {
+  loadRawDacMonitorData,
+  RAW_DAC_MONITOR_FILE,
+  selectRawDacEvents,
+} from '../../8sleep/rawDacMonitor.js';
 
 const router = express.Router();
 
@@ -24,6 +29,7 @@ const DEFAULT_RAW_FILE_COUNT = 1;
 const MAX_RAW_FILE_COUNT = 5;
 const MAX_LIMIT = 1_000;
 const DEFAULT_EVENT_LIMIT = 100;
+const DEFAULT_RAW_DAC_EVENT_LIMIT = 100;
 
 type RawFileSnapshot = {
   name: string;
@@ -39,6 +45,7 @@ type InputSignalDiagnosticsQuery = {
   allRawRecords?: string;
   limit?: string;
   eventLimit?: string;
+  rawDacEventLimit?: string;
   rawFileCount?: string;
   maxRawFileBytes?: string;
 };
@@ -64,6 +71,7 @@ function parseDiagnosticsQuery(query: InputSignalDiagnosticsQuery) {
     allRawRecords: parseBooleanQuery(query.allRawRecords),
     limit: parsePositiveIntegerQuery(query.limit, DEFAULT_LIMIT, MAX_LIMIT, 'limit'),
     eventLimit: parsePositiveIntegerQuery(query.eventLimit, DEFAULT_EVENT_LIMIT, MAX_LIMIT, 'eventLimit'),
+    rawDacEventLimit: parsePositiveIntegerQuery(query.rawDacEventLimit, DEFAULT_RAW_DAC_EVENT_LIMIT, MAX_LIMIT, 'rawDacEventLimit'),
     rawFileCount: parsePositiveIntegerQuery(query.rawFileCount, DEFAULT_RAW_FILE_COUNT, MAX_RAW_FILE_COUNT, 'rawFileCount'),
     maxRawFileBytes: parsePositiveIntegerQuery(
       query.maxRawFileBytes,
@@ -131,6 +139,12 @@ router.get(
         until: options.until,
         limit: options.eventLimit,
       });
+      const rawDacMonitorData = await loadRawDacMonitorData();
+      const rawDacEvents = selectRawDacEvents(rawDacMonitorData.events, {
+        since: options.since,
+        until: options.until,
+        limit: options.rawDacEventLimit,
+      });
 
       res.json({
         timestamp: new Date().toISOString(),
@@ -144,6 +158,14 @@ router.get(
           totalEventCount: inputSignalMonitorData.events.length,
           returnedEventCount: recordedEvents.length,
           events: recordedEvents,
+        },
+        rawDacMonitoring: {
+          file: RAW_DAC_MONITOR_FILE,
+          updatedAt: rawDacMonitorData.updatedAt,
+          totalEventCount: rawDacMonitorData.totalEventCount,
+          retainedEventCount: rawDacMonitorData.events.length,
+          returnedEventCount: rawDacEvents.length,
+          events: rawDacEvents,
         },
         rawFiles,
         rawFileDiagnostics,

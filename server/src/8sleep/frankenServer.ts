@@ -10,6 +10,7 @@ import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 import { loadDeviceStatus } from './loadDeviceStatus.js';
 import config from '../config.js';
 import { toPromise, wait } from './promises.js';
+import { recordRawDacEvent } from './rawDacMonitor.js';
 
 const FRANKEN_CONNECTION_TIMEOUT_MS = 25_000;
 const FRANKEN_CONNECTION_MAX_ATTEMPTS = 10;
@@ -46,6 +47,12 @@ export class Franken {
 
   public async sendMessage(message: string) {
     logger.debug(`Sending message to sock | message: ${message}`);
+    recordRawDacEvent({
+      bytes: Buffer.byteLength(message),
+      direction: 'outbound',
+      message,
+      source: 'frankenSocket',
+    });
     let responseBytes: Buffer;
     try {
       responseBytes = await this.sequentialQueue.exec(async () => {
@@ -112,7 +119,12 @@ export class Franken {
   }
 
   public static fromSocket(socket: Socket) {
-    const messageStream = new MessageStream(socket, Franken.separator);
+    const messageStream = new MessageStream(socket, Franken.separator, chunk => recordRawDacEvent({
+      bytes: chunk.length,
+      direction: 'inbound',
+      message: chunk.toString(),
+      source: 'frankenSocket',
+    }));
     return new Franken(socket, messageStream, new SequentialQueue());
   }
 

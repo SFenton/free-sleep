@@ -134,13 +134,16 @@ class ServerStatus {
             this.status.analyzeSleepRight = servicesDB.data.biometrics.jobs.analyzeSleepRight;
             this.status.biometricsCalibrationLeft = servicesDB.data.biometrics.jobs.calibrateLeft;
             this.status.biometricsCalibrationRight = servicesDB.data.biometrics.jobs.calibrateRight;
-            const time = moment(servicesDB.data.biometrics.jobs.stream.timestamp);
-            if (moment().diff(time, 'minutes') >= 5) {
-                servicesDB.data.biometrics.jobs.stream.status = 'failed';
-                servicesDB.data.biometrics.jobs.stream.message = 'Biometrics stream died! Run `systemctl restart free-sleep-stream`';
+            const streamJob = servicesDB.data.biometrics.jobs.stream;
+            const time = moment(streamJob.timestamp);
+            const streamTimedOut = moment().diff(time, 'minutes') >= 5;
+            const streamTimedOutMessage = 'Biometrics stream died! Run `systemctl restart free-sleep-stream`';
+            if (streamTimedOut && (streamJob.status !== 'failed' || streamJob.message !== streamTimedOutMessage)) {
+                streamJob.status = 'failed';
+                streamJob.message = streamTimedOutMessage;
+                await servicesDB.write();
             }
-            await servicesDB.write();
-            this.status.biometricsStream = servicesDB.data.biometrics.jobs.stream;
+            this.status.biometricsStream = streamJob;
         }
         else {
             // Delete keys from server status

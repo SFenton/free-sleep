@@ -5,12 +5,14 @@ import { connectFranken } from '../../8sleep/frankenServer.js';
 import logger from '../../logger.js';
 import { DEFAULT_LIMIT, DEFAULT_MAX_RAW_FILE_BYTES, diagnoseDeviceStatusResponse, diagnoseRawFile, parseTimestamp, } from '../../tools/inputSignalDiagnostics.js';
 import { INPUT_SIGNAL_MONITOR_FILE, loadInputSignalMonitorData, selectInputSignalEvents, } from '../../8sleep/inputSignalMonitor.js';
+import { loadRawDacMonitorData, RAW_DAC_MONITOR_FILE, selectRawDacEvents, } from '../../8sleep/rawDacMonitor.js';
 const router = express.Router();
 const PERSISTENT_DIR = '/persistent';
 const DEFAULT_RAW_FILE_COUNT = 1;
 const MAX_RAW_FILE_COUNT = 5;
 const MAX_LIMIT = 1_000;
 const DEFAULT_EVENT_LIMIT = 100;
+const DEFAULT_RAW_DAC_EVENT_LIMIT = 100;
 function parseBooleanQuery(value) {
     if (value === undefined)
         return false;
@@ -32,6 +34,7 @@ function parseDiagnosticsQuery(query) {
         allRawRecords: parseBooleanQuery(query.allRawRecords),
         limit: parsePositiveIntegerQuery(query.limit, DEFAULT_LIMIT, MAX_LIMIT, 'limit'),
         eventLimit: parsePositiveIntegerQuery(query.eventLimit, DEFAULT_EVENT_LIMIT, MAX_LIMIT, 'eventLimit'),
+        rawDacEventLimit: parsePositiveIntegerQuery(query.rawDacEventLimit, DEFAULT_RAW_DAC_EVENT_LIMIT, MAX_LIMIT, 'rawDacEventLimit'),
         rawFileCount: parsePositiveIntegerQuery(query.rawFileCount, DEFAULT_RAW_FILE_COUNT, MAX_RAW_FILE_COUNT, 'rawFileCount'),
         maxRawFileBytes: parsePositiveIntegerQuery(query.maxRawFileBytes, DEFAULT_MAX_RAW_FILE_BYTES, DEFAULT_MAX_RAW_FILE_BYTES, 'maxRawFileBytes'),
     };
@@ -89,6 +92,12 @@ router.get('/diagnostics/inputSignals', async (req, res) => {
             until: options.until,
             limit: options.eventLimit,
         });
+        const rawDacMonitorData = await loadRawDacMonitorData();
+        const rawDacEvents = selectRawDacEvents(rawDacMonitorData.events, {
+            since: options.since,
+            until: options.until,
+            limit: options.rawDacEventLimit,
+        });
         res.json({
             timestamp: new Date().toISOString(),
             options,
@@ -101,6 +110,14 @@ router.get('/diagnostics/inputSignals', async (req, res) => {
                 totalEventCount: inputSignalMonitorData.events.length,
                 returnedEventCount: recordedEvents.length,
                 events: recordedEvents,
+            },
+            rawDacMonitoring: {
+                file: RAW_DAC_MONITOR_FILE,
+                updatedAt: rawDacMonitorData.updatedAt,
+                totalEventCount: rawDacMonitorData.totalEventCount,
+                retainedEventCount: rawDacMonitorData.events.length,
+                returnedEventCount: rawDacEvents.length,
+                events: rawDacEvents,
             },
             rawFiles,
             rawFileDiagnostics,

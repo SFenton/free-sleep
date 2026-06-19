@@ -11,9 +11,10 @@ export class MessageStream {
     queue = [];
     ended = false;
     error;
-    constructor(readable, separator = Buffer.from('\n\n')) {
+    constructor(readable, separator = Buffer.from('\n\n'), onMessage) {
         this.splitter = binarySplit(separator);
         this.splitter.on('data', (chunk) => {
+            onMessage?.(chunk);
             this.queue.push(chunk);
         });
         this.splitter.on('end', () => {

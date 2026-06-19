@@ -17,10 +17,12 @@ export class MessageStream {
 
   public constructor(
     readable: NodeJS.ReadableStream,
-    separator = Buffer.from('\n\n')
+    separator = Buffer.from('\n\n'),
+    onMessage?: (chunk: Buffer) => void,
   ) {
     this.splitter = binarySplit(separator);
     this.splitter.on('data', (chunk: Buffer) => {
+      onMessage?.(chunk);
       this.queue.push(chunk);
     });
     this.splitter.on('end', () => {
