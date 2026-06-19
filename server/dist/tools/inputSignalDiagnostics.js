@@ -1,7 +1,8 @@
 import cbor from 'cbor';
 import { readFileSync, statSync } from 'fs';
-const DEFAULT_MAX_RAW_FILE_BYTES = 50 * 1024 * 1024;
-const DEFAULT_LIMIT = 200;
+import { pathToFileURL } from 'url';
+export const DEFAULT_MAX_RAW_FILE_BYTES = 50 * 1024 * 1024;
+export const DEFAULT_LIMIT = 200;
 const INPUT_RELATED_KEY = /button|gesture|input|press|tap|touch/i;
 const GESTURE_FIELDS = ['doubleTap', 'tripleTap', 'quadTap'];
 function printUsage() {
@@ -23,7 +24,7 @@ This tool is offline-only. It does not connect to the live Franken socket, so it
 to run without disrupting the Free Sleep service.
 `);
 }
-function parseTimestamp(value) {
+export function parseTimestamp(value) {
     const numericValue = Number(value);
     if (Number.isFinite(numericValue)) {
         return numericValue > 1_000_000_000_000 ? numericValue / 1_000 : numericValue;
@@ -147,8 +148,7 @@ function normalizeForJson(value) {
     }
     return value;
 }
-function diagnoseDeviceStatusFile(file) {
-    const rawResponse = readFileSync(file, 'utf8');
+export function diagnoseDeviceStatusResponse(file, rawResponse) {
     const { fields, unparsedLines } = parseRawDeviceStatusFields(rawResponse);
     const decodedGestureFields = {};
     const warnings = [];
@@ -187,6 +187,9 @@ function diagnoseDeviceStatusFile(file) {
         }
     }
     return diagnostic;
+}
+function diagnoseDeviceStatusFile(file) {
+    return diagnoseDeviceStatusResponse(file, readFileSync(file, 'utf8'));
 }
 function isRecordObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -262,7 +265,7 @@ async function collectDecodedOuterRecords(buffer, file) {
     });
     return { outerRecords, warnings };
 }
-async function diagnoseRawFile(file, options) {
+export async function diagnoseRawFile(file, options) {
     const stat = statSync(file);
     if (stat.size > options.maxRawFileBytes) {
         return {
@@ -325,8 +328,10 @@ async function main() {
         rawFileDiagnostics,
     }, null, 2)}\n`);
 }
-main().catch(error => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    main().catch(error => {
+        process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+        process.exitCode = 1;
+    });
+}
 //# sourceMappingURL=inputSignalDiagnostics.js.map

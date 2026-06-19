@@ -87,10 +87,13 @@ export class Franken {
   }
 
   public async getDeviceStatus(getGestures=false): Promise<DeviceStatus> {
+    return await loadDeviceStatus(await this.getRawDeviceStatusResponse(), getGestures);
+  }
+
+  public async getRawDeviceStatusResponse(): Promise<string> {
     const command: FrankenCommand = 'DEVICE_STATUS';
     const commandNumber = frankenCommands[command];
-    const response = await this.sendMessage(commandNumber);
-    return await loadDeviceStatus(response, getGestures);
+    return await this.sendMessage(commandNumber);
   }
 
   public close() {

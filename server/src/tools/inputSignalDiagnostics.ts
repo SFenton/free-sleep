@@ -1,14 +1,13 @@
 import cbor from 'cbor';
 import { readFileSync, statSync } from 'fs';
+import { pathToFileURL } from 'url';
 
-const DEFAULT_MAX_RAW_FILE_BYTES = 50 * 1024 * 1024;
-const DEFAULT_LIMIT = 200;
+export const DEFAULT_MAX_RAW_FILE_BYTES = 50 * 1024 * 1024;
+export const DEFAULT_LIMIT = 200;
 const INPUT_RELATED_KEY = /button|gesture|input|press|tap|touch/i;
 const GESTURE_FIELDS = ['doubleTap', 'tripleTap', 'quadTap'] as const;
 
-type CliOptions = {
-  deviceStatusFiles: string[];
-  rawFiles: string[];
+type RawDiagnosticOptions = {
   since?: number;
   until?: number;
   allRawRecords: boolean;
@@ -16,12 +15,17 @@ type CliOptions = {
   maxRawFileBytes: number;
 };
 
-type DiagnosticWarning = {
+type CliOptions = RawDiagnosticOptions & {
+  deviceStatusFiles: string[];
+  rawFiles: string[];
+};
+
+export type DiagnosticWarning = {
   file?: string;
   message: string;
 };
 
-type DeviceStatusDiagnostic = {
+export type DeviceStatusDiagnostic = {
   file: string;
   fields: Record<string, string>;
   decodedGestureFields: Record<string, unknown>;
@@ -31,7 +35,7 @@ type DeviceStatusDiagnostic = {
   warnings: DiagnosticWarning[];
 };
 
-type RawFileDiagnostic = {
+export type RawFileDiagnostic = {
   file: string;
   sizeBytes: number;
   matchedRecords: unknown[];
@@ -60,7 +64,7 @@ to run without disrupting the Free Sleep service.
 `);
 }
 
-function parseTimestamp(value: string): number {
+export function parseTimestamp(value: string): number {
   const numericValue = Number(value);
   if (Number.isFinite(numericValue)) {
     return numericValue > 1_000_000_000_000 ? numericValue / 1_000 : numericValue;
@@ -208,8 +212,7 @@ function normalizeForJson(value: unknown): unknown {
   return value;
 }
 
-function diagnoseDeviceStatusFile(file: string): DeviceStatusDiagnostic {
-  const rawResponse = readFileSync(file, 'utf8');
+export function diagnoseDeviceStatusResponse(file: string, rawResponse: string): DeviceStatusDiagnostic {
   const { fields, unparsedLines } = parseRawDeviceStatusFields(rawResponse);
   const decodedGestureFields: Record<string, unknown> = {};
   const warnings: DiagnosticWarning[] = [];
@@ -254,6 +257,10 @@ function diagnoseDeviceStatusFile(file: string): DeviceStatusDiagnostic {
   return diagnostic;
 }
 
+function diagnoseDeviceStatusFile(file: string): DeviceStatusDiagnostic {
+  return diagnoseDeviceStatusResponse(file, readFileSync(file, 'utf8'));
+}
+
 function isRecordObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -290,7 +297,7 @@ function isInputRelatedRecord(record: unknown): boolean {
   return Object.keys(record).some(key => INPUT_RELATED_KEY.test(key));
 }
 
-function isInTimestampRange(record: unknown, options: CliOptions): boolean {
+function isInTimestampRange(record: unknown, options: RawDiagnosticOptions): boolean {
   const timestamp = getRecordTimestamp(record);
   if (timestamp === undefined) return options.since === undefined && options.until === undefined;
   if (options.since !== undefined && timestamp < options.since) return false;
@@ -328,7 +335,7 @@ async function collectDecodedOuterRecords(buffer: Buffer, file: string) {
   return { outerRecords, warnings };
 }
 
-async function diagnoseRawFile(file: string, options: CliOptions): Promise<RawFileDiagnostic> {
+export async function diagnoseRawFile(file: string, options: RawDiagnosticOptions): Promise<RawFileDiagnostic> {
   const stat = statSync(file);
   if (stat.size > options.maxRawFileBytes) {
     return {
@@ -398,7 +405,9 @@ async function main() {
   }, null, 2)}\n`);
 }
 
-main().catch(error => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(error => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
