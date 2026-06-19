@@ -4,11 +4,13 @@ import path from 'path';
 import { connectFranken } from '../../8sleep/frankenServer.js';
 import logger from '../../logger.js';
 import { DEFAULT_LIMIT, DEFAULT_MAX_RAW_FILE_BYTES, diagnoseDeviceStatusResponse, diagnoseRawFile, parseTimestamp, } from '../../tools/inputSignalDiagnostics.js';
+import { INPUT_SIGNAL_MONITOR_FILE, loadInputSignalMonitorData, selectInputSignalEvents, } from '../../8sleep/inputSignalMonitor.js';
 const router = express.Router();
 const PERSISTENT_DIR = '/persistent';
 const DEFAULT_RAW_FILE_COUNT = 1;
 const MAX_RAW_FILE_COUNT = 5;
 const MAX_LIMIT = 1_000;
+const DEFAULT_EVENT_LIMIT = 100;
 function parseBooleanQuery(value) {
     if (value === undefined)
         return false;
@@ -29,6 +31,7 @@ function parseDiagnosticsQuery(query) {
         until: query.until ? parseTimestamp(query.until) : undefined,
         allRawRecords: parseBooleanQuery(query.allRawRecords),
         limit: parsePositiveIntegerQuery(query.limit, DEFAULT_LIMIT, MAX_LIMIT, 'limit'),
+        eventLimit: parsePositiveIntegerQuery(query.eventLimit, DEFAULT_EVENT_LIMIT, MAX_LIMIT, 'eventLimit'),
         rawFileCount: parsePositiveIntegerQuery(query.rawFileCount, DEFAULT_RAW_FILE_COUNT, MAX_RAW_FILE_COUNT, 'rawFileCount'),
         maxRawFileBytes: parsePositiveIntegerQuery(query.maxRawFileBytes, DEFAULT_MAX_RAW_FILE_BYTES, DEFAULT_MAX_RAW_FILE_BYTES, 'maxRawFileBytes'),
     };
@@ -80,11 +83,25 @@ router.get('/diagnostics/inputSignals', async (req, res) => {
         for (const rawFile of rawFiles) {
             rawFileDiagnostics.push(await diagnoseRawFile(rawFile.path, options));
         }
+        const inputSignalMonitorData = await loadInputSignalMonitorData();
+        const recordedEvents = selectInputSignalEvents(inputSignalMonitorData.events, {
+            since: options.since,
+            until: options.until,
+            limit: options.eventLimit,
+        });
         res.json({
             timestamp: new Date().toISOString(),
             options,
             warnings,
             deviceStatusDiagnostic,
+            monitoring: {
+                file: INPUT_SIGNAL_MONITOR_FILE,
+                updatedAt: inputSignalMonitorData.updatedAt,
+                lastSnapshot: inputSignalMonitorData.lastSnapshot,
+                totalEventCount: inputSignalMonitorData.events.length,
+                returnedEventCount: recordedEvents.length,
+                events: recordedEvents,
+            },
             rawFiles,
             rawFileDiagnostics,
         });

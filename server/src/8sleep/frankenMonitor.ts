@@ -11,6 +11,7 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import { DeepPartial } from 'ts-essentials';
 import serverStatus from '../serverStatus.js';
 import { publishObservedMqttDeviceStatus } from '../mqtt/mqttService.js';
+import { recordInputSignalSnapshot } from './inputSignalMonitor.js';
 
 const DEVICE_STATUS_POLL_MS = 1_000;
 
@@ -99,6 +100,21 @@ export class FrankenMonitor {
     await publishObservedMqttDeviceStatus(nextDeviceStatus);
   }
 
+  private async recordInputSignals(rawDeviceStatusResponse: string) {
+    try {
+      const events = await recordInputSignalSnapshot(rawDeviceStatusResponse, 'frankenMonitor');
+      events.forEach(event => {
+        logger.info(
+          `Input signal changed | field=${event.field} channel=${event.channel} side=${event.side} ` +
+          `value=${event.value} previous=${event.previousValue ?? 'none'}`
+        );
+      });
+    } catch (error) {
+      logger.error('Failed to record input signal snapshot');
+      logger.error(error);
+    }
+  }
+
 
   private async frankenLoop() {
     const franken = await connectFranken();
@@ -106,7 +122,9 @@ export class FrankenMonitor {
     let hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
     const waitTime = DEVICE_STATUS_POLL_MS;
     if (hasGestures) {
-      this.deviceStatus = await franken.getDeviceStatus(true);
+      const initialStatus = await franken.getDeviceStatusWithRaw(true);
+      this.deviceStatus = initialStatus.deviceStatus;
+      await this.recordInputSignals(initialStatus.rawResponse);
       logger.debug(`Gestures supported for ${this.deviceStatus.coverVersion}`);
     } else {
       logger.debug(`Gestures not supported for ${this.deviceStatus.coverVersion}`);
@@ -118,9 +136,11 @@ export class FrankenMonitor {
           await wait(waitTime);
           if (!this.isRunning) break;
           const franken = await connectFranken();
-          const nextDeviceStatus = await franken.getDeviceStatus(hasGestures);
+          const statusResponse = await franken.getDeviceStatusWithRaw(hasGestures);
+          const nextDeviceStatus = statusResponse.deviceStatus;
           await settingsDB.read();
           if (hasGestures) {
+            await this.recordInputSignals(statusResponse.rawResponse);
             await this.processGestures(nextDeviceStatus);
           }
           await this.publishObservedDeviceStatus(nextDeviceStatus);

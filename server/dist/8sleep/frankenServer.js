@@ -74,7 +74,12 @@ export class Franken {
         await this.sendMessage(`${commandNumber}\n${cleanedArg}`);
     }
     async getDeviceStatus(getGestures = false) {
-        return await loadDeviceStatus(await this.getRawDeviceStatusResponse(), getGestures);
+        return (await this.getDeviceStatusWithRaw(getGestures)).deviceStatus;
+    }
+    async getDeviceStatusWithRaw(getGestures = false) {
+        const rawResponse = await this.getRawDeviceStatusResponse();
+        const deviceStatus = await loadDeviceStatus(rawResponse, getGestures);
+        return { deviceStatus, rawResponse };
     }
     async getRawDeviceStatusResponse() {
         const command = 'DEVICE_STATUS';
