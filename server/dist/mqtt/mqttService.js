@@ -162,8 +162,8 @@ class MqttService {
         await mqttSettingsDB.read();
         await this.configure(mqttSettingsDB.data);
     }
-    async publishObservedDeviceStatus(deviceStatus) {
-        await this.runPublisher('observed device status', () => this.publishDeviceStatus(deviceStatus));
+    async publishObservedDeviceStatus(deviceStatus, previousDeviceStatus) {
+        await this.runPublisher('observed device status', () => this.publishDeviceStatusChanges(deviceStatus, previousDeviceStatus));
     }
     startLowDbWatcher() {
         if (this.lowDbWatcher)
@@ -583,6 +583,49 @@ class MqttService {
         ]);
         return deviceStatus;
     }
+    async publishDeviceStatusChanges(deviceStatus, previousDeviceStatus) {
+        if (!previousDeviceStatus)
+            return this.publishDeviceStatus(deviceStatus);
+        const publishJobs = [
+            this.publish('deviceStatus/state', deviceStatus, true),
+        ];
+        for (const side of SideSchema.options) {
+            const currentSideStatus = deviceStatus[side];
+            const previousSideStatus = previousDeviceStatus[side];
+            if (!_.isEqual(currentSideStatus, previousSideStatus)) {
+                publishJobs.push(this.publish(`${side}/state`, currentSideStatus, true));
+            }
+            if (currentSideStatus.currentTemperatureF !== previousSideStatus.currentTemperatureF) {
+                publishJobs.push(this.publish(`${side}/currentTemperatureF/state`, currentSideStatus.currentTemperatureF, true));
+            }
+            if (currentSideStatus.targetTemperatureF !== previousSideStatus.targetTemperatureF) {
+                publishJobs.push(this.publish(`${side}/targetTemperatureF/state`, currentSideStatus.targetTemperatureF, true));
+            }
+            if (currentSideStatus.secondsRemaining !== previousSideStatus.secondsRemaining) {
+                publishJobs.push(this.publish(`${side}/secondsRemaining/state`, currentSideStatus.secondsRemaining, true));
+            }
+            if (currentSideStatus.isOn !== previousSideStatus.isOn) {
+                publishJobs.push(this.publish(`${side}/isOn/state`, currentSideStatus.isOn, true));
+            }
+            if (currentSideStatus.isAlarmVibrating !== previousSideStatus.isAlarmVibrating) {
+                publishJobs.push(this.publish(`${side}/isAlarmVibrating/state`, currentSideStatus.isAlarmVibrating, true));
+            }
+        }
+        if (deviceStatus.waterLevel !== previousDeviceStatus.waterLevel) {
+            publishJobs.push(this.publish('waterLevel/state', deviceStatus.waterLevel, true));
+        }
+        if (deviceStatus.isPriming !== previousDeviceStatus.isPriming) {
+            publishJobs.push(this.publish('isPriming/state', deviceStatus.isPriming, true));
+        }
+        if (deviceStatus.wifiStrength !== previousDeviceStatus.wifiStrength) {
+            publishJobs.push(this.publish('wifiStrength/state', deviceStatus.wifiStrength, true));
+        }
+        if (deviceStatus.settings.ledBrightness !== previousDeviceStatus.settings.ledBrightness) {
+            publishJobs.push(this.publish('ledBrightness/state', deviceStatus.settings.ledBrightness, true));
+        }
+        await Promise.all(publishJobs);
+        return deviceStatus;
+    }
     async publishSettings() {
         await settingsDB.read();
         await this.publish('settings/state', settingsDB.data, true);
@@ -753,7 +796,7 @@ export function startMqttService() {
 export async function reloadMqttServiceSettings() {
     await mqttService?.reloadSettings();
 }
-export async function publishObservedMqttDeviceStatus(deviceStatus) {
-    await mqttService?.publishObservedDeviceStatus(deviceStatus);
+export async function publishObservedMqttDeviceStatus(deviceStatus, previousDeviceStatus) {
+    await mqttService?.publishObservedDeviceStatus(deviceStatus, previousDeviceStatus);
 }
 //# sourceMappingURL=mqttService.js.map

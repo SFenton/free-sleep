@@ -88,7 +88,7 @@ export class FrankenMonitor {
     async publishObservedDeviceStatus(nextDeviceStatus) {
         if (_.isEqual(this.deviceStatus, nextDeviceStatus))
             return;
-        await publishObservedMqttDeviceStatus(nextDeviceStatus);
+        await publishObservedMqttDeviceStatus(nextDeviceStatus, this.deviceStatus);
     }
     async recordInputSignals(rawDeviceStatusResponse) {
         try {
