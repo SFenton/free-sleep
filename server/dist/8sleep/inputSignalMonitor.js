@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import path from 'path';
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 import config from '../config.js';
-const INPUT_SIGNAL_FIELDS = ['doubleTap', 'tripleTap', 'quadTap'];
+export const INPUT_SIGNAL_FIELDS = ['dismissAlarm', 'doubleTap', 'tripleTap', 'quadTap'];
 const INPUT_SIGNAL_EVENT_LIMIT = 500;
 export const INPUT_SIGNAL_MONITOR_FILE = path.join(config.dbFolder, 'input-signals.json');
 const defaultInputSignalMonitorData = () => ({
@@ -58,7 +58,9 @@ function createInputSignalEvents(previousSnapshot, snapshot, source, observedAt,
         const currentValue = snapshot[field];
         if (!currentValue)
             continue;
-        const previousValue = previousSnapshot[field] ?? {};
+        const previousValue = previousSnapshot[field];
+        if (!previousValue)
+            continue;
         for (const [channel, value] of Object.entries(currentValue)) {
             if (previousValue[channel] === value)
                 continue;

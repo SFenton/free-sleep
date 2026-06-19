@@ -4,8 +4,8 @@ import { pathToFileURL } from 'url';
 
 export const DEFAULT_MAX_RAW_FILE_BYTES = 50 * 1024 * 1024;
 export const DEFAULT_LIMIT = 200;
-const INPUT_RELATED_KEY = /button|gesture|input|press|tap|touch/i;
-const GESTURE_FIELDS = ['doubleTap', 'tripleTap', 'quadTap'] as const;
+const INPUT_RELATED_KEY = /alarm|button|gesture|input|press|tap|touch/i;
+const GESTURE_FIELDS = ['dismissAlarm', 'doubleTap', 'tripleTap', 'quadTap'] as const;
 
 type RawDiagnosticOptions = {
   since?: number;

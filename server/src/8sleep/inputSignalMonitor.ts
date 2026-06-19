@@ -3,7 +3,7 @@ import path from 'path';
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 import config from '../config.js';
 
-const INPUT_SIGNAL_FIELDS = ['doubleTap', 'tripleTap', 'quadTap'] as const;
+export const INPUT_SIGNAL_FIELDS = ['dismissAlarm', 'doubleTap', 'tripleTap', 'quadTap'] as const;
 const INPUT_SIGNAL_EVENT_LIMIT = 500;
 
 export const INPUT_SIGNAL_MONITOR_FILE = path.join(config.dbFolder, 'input-signals.json');
@@ -100,7 +100,9 @@ function createInputSignalEvents(
     const currentValue = snapshot[field];
     if (!currentValue) continue;
 
-    const previousValue = previousSnapshot[field] ?? {};
+    const previousValue = previousSnapshot[field];
+    if (!previousValue) continue;
+
     for (const [channel, value] of Object.entries(currentValue)) {
       if (previousValue[channel] === value) continue;
       events.push({
