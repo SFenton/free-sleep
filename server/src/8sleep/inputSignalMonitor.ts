@@ -122,6 +122,10 @@ function createInputSignalEvents(
   return events;
 }
 
+function inputSignalSnapshotsEqual(left: InputSignalSnapshot, right: InputSignalSnapshot) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 async function writeInputSignalMonitorData(data: InputSignalMonitorData) {
   await mkdir(path.dirname(INPUT_SIGNAL_MONITOR_FILE), { recursive: true });
   const temporaryPath = `${INPUT_SIGNAL_MONITOR_FILE}.tmp`;
@@ -180,7 +184,16 @@ export async function recordInputSignalSnapshot(rawDeviceStatusResponse: string,
     rawDeviceStatusKeys,
   );
 
-  if (events.length === 0) return [];
+  if (events.length === 0) {
+    if (!inputSignalSnapshotsEqual(monitorData.lastSnapshot, snapshot)) {
+      await writeInputSignalMonitorData({
+        ...monitorData,
+        updatedAt: observedAt,
+        lastSnapshot: snapshot,
+      });
+    }
+    return [];
+  }
 
   const updatedData: InputSignalMonitorData = {
     ...monitorData,
